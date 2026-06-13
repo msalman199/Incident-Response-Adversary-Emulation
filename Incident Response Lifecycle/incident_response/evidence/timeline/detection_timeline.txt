@@ -1,0 +1,15 @@
+=== INCIDENT DETECTION TIMELINE ===
+
+$(date '+%Y-%m-%d %H:%M:%S') - Initial system baseline established
+$(date '+%Y-%m-%d %H:%M:%S') - Suspicious activity simulation initiated
+$(date '+%Y-%m-%d %H:%M:%S') - High CPU usage detected (yes process)
+$(date '+%Y-%m-%d %H:%M:%S') - Suspicious files identified in /tmp directory
+$(date '+%Y-%m-%d %H:%M:%S') - Fake malware script discovered
+$(date '+%Y-%m-%d %H:%M:%S') - Network activity anomalies logged
+$(date '+%Y-%m-%d %H:%M:%S') - Detection phase completed
+
+=== INDICATORS OF COMPROMISE (IOCs) ===
+- Process: yes command consuming high CPU
+- Files: /tmp/suspicious_file.txt, /tmp/fake_malware.sh
+- Network: Suspicious connection attempts logged
+- System: Unusual process behavior detected
