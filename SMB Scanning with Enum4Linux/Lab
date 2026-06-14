@@ -1,0 +1,813 @@
+SMB Scanning with Enum4Linux
+Objectives
+By the end of this lab, students will be able to:
+
+Understand the fundamentals of SMB (Server Message Block) protocol enumeration
+Use Enum4Linux to extract comprehensive user and system information from SMB services
+Identify SMB shares, users, groups, and system information through enumeration
+Develop Python scripts to automate SMB enumeration for large-scale network assessments
+Analyze enumeration results to identify potential security vulnerabilities
+Apply SMB enumeration techniques in incident response and adversary emulation scenarios
+Prerequisites
+Before starting this lab, students should have:
+
+Basic understanding of Linux command-line operations
+Fundamental knowledge of networking concepts (IP addresses, ports, protocols)
+Basic familiarity with Python programming
+Understanding of SMB/CIFS protocol basics
+Knowledge of penetration testing methodologies
+Lab Environment Setup
+Ready-to-Use Cloud Machines: Al Nafi provides Linux-based cloud machines with all necessary tools pre-installed. Simply click Start Lab to access your dedicated environment. No need to build your own VM or install additional software.
+
+Your lab environment includes:
+
+Ubuntu Linux machine with root access
+Enum4Linux pre-installed
+Python 3 with required libraries
+Sample SMB services configured for testing
+All necessary networking tools
+Task 1: SMB Enumeration with Enum4Linux
+Subtask 1.1: Understanding SMB and Enum4Linux
+SMB (Server Message Block) is a network file sharing protocol that allows applications to read and write files and request services from server programs. Enum4Linux is a powerful tool for enumerating information from Windows and Samba systems.
+
+First, let's verify that Enum4Linux is installed and understand its capabilities:
+
+enum4linux --help
+Subtask 1.2: Setting Up a Local SMB Service for Testing
+To practice SMB enumeration safely, we'll set up a local Samba service on our machine:
+
+# Install Samba if not already present
+sudo apt update
+sudo apt install samba samba-common-bin -y
+
+# Create a test directory
+sudo mkdir -p /srv/samba/testshare
+sudo chmod 755 /srv/samba/testshare
+
+# Create test users
+sudo useradd -m testuser1
+sudo useradd -m testuser2
+echo "testuser1:password123" | sudo chpasswd
+echo "testuser2:password456" | sudo chpasswd
+
+# Add users to Samba
+echo -e "password123\npassword123" | sudo smbpasswd -a testuser1
+echo -e "password456\npassword456" | sudo smbpasswd -a testuser2
+Create a basic Samba configuration:
+
+sudo tee /etc/samba/smb.conf > /dev/null << 'EOF'
+[global]
+   workgroup = WORKGROUP
+   server string = Test SMB Server
+   security = user
+   map to guest = bad user
+   dns proxy = no
+
+[testshare]
+   path = /srv/samba/testshare
+   browsable = yes
+   writable = yes
+   guest ok = no
+   valid users = testuser1, testuser2
+EOF
+Start the Samba service:
+
+sudo systemctl restart smbd
+sudo systemctl enable smbd
+sudo systemctl status smbd
+Subtask 1.3: Basic SMB Enumeration
+Now let's perform basic enumeration against our local SMB service:
+
+# Basic enumeration without credentials
+enum4linux -a 127.0.0.1
+The -a flag performs all enumeration checks. Let's break down what this command discovers:
+
+Workgroup/Domain information
+Session information
+Share enumeration
+User enumeration
+Group enumeration
+Password policy information
+Subtask 1.4: Detailed User Information Extraction
+Let's focus specifically on extracting user information using various Enum4Linux options:
+
+# Extract user list
+enum4linux -U 127.0.0.1
+
+# Extract user information with RID cycling
+enum4linux -r 127.0.0.1
+
+# Extract groups information
+enum4linux -G 127.0.0.1
+
+# Extract shares information
+enum4linux -S 127.0.0.1
+Create a comprehensive enumeration script:
+
+#!/bin/bash
+# SMB_enum_comprehensive.sh
+
+TARGET=$1
+OUTPUT_DIR="smb_enum_$(date +%Y%m%d_%H%M%S)"
+
+if [ -z "$TARGET" ]; then
+    echo "Usage: $0 <target_ip>"
+    exit 1
+fi
+
+mkdir -p $OUTPUT_DIR
+
+echo "[+] Starting comprehensive SMB enumeration of $TARGET"
+echo "[+] Results will be saved in $OUTPUT_DIR"
+
+# Basic enumeration
+echo "[+] Running basic enumeration..."
+enum4linux -a $TARGET > $OUTPUT_DIR/basic_enum.txt 2>&1
+
+# User enumeration
+echo "[+] Extracting user information..."
+enum4linux -U $TARGET > $OUTPUT_DIR/users.txt 2>&1
+
+# Group enumeration
+echo "[+] Extracting group information..."
+enum4linux -G $TARGET > $OUTPUT_DIR/groups.txt 2>&1
+
+# Share enumeration
+echo "[+] Extracting share information..."
+enum4linux -S $TARGET > $OUTPUT_DIR/shares.txt 2>&1
+
+# Password policy
+echo "[+] Extracting password policy..."
+enum4linux -P $TARGET > $OUTPUT_DIR/password_policy.txt 2>&1
+
+# OS information
+echo "[+] Extracting OS information..."
+enum4linux -o $TARGET > $OUTPUT_DIR/os_info.txt 2>&1
+
+echo "[+] Enumeration complete. Check $OUTPUT_DIR for results."
+Make the script executable and run it:
+
+chmod +x SMB_enum_comprehensive.sh
+./SMB_enum_comprehensive.sh 127.0.0.1
+Subtask 1.5: Analyzing Enumeration Results
+Let's analyze the results systematically:
+
+# Create an analysis script
+cat > analyze_smb_results.py << 'EOF'
+#!/usr/bin/env python3
+
+import os
+import re
+import sys
+from datetime import datetime
+
+def analyze_users(file_path):
+    """Analyze user enumeration results"""
+    users = []
+    try:
+        with open(file_path, 'r') as f:
+            content = f.read()
+            # Extract usernames using regex
+            user_matches = re.findall(r'user:\[([^\]]+)\]', content)
+            users.extend(user_matches)
+            
+            # Also look for RID cycling results
+            rid_matches = re.findall(r'S-1-5-21-\d+-\d+-\d+-(\d+)\s+(\w+)', content)
+            for rid, username in rid_matches:
+                if username not in users:
+                    users.append(username)
+    except FileNotFoundError:
+        print(f"File not found: {file_path}")
+    
+    return users
+
+def analyze_shares(file_path):
+    """Analyze share enumeration results"""
+    shares = []
+    try:
+        with open(file_path, 'r') as f:
+            content = f.read()
+            # Extract share names
+            share_matches = re.findall(r'Sharename\s+Type\s+Comment\s*\n\s*-+\s*\n(.*?)(?=\n\n|\Z)', content, re.DOTALL)
+            for match in share_matches:
+                lines = match.strip().split('\n')
+                for line in lines:
+                    if line.strip() and not line.startswith('-'):
+                        parts = line.split()
+                        if parts:
+                            shares.append(parts[0])
+    except FileNotFoundError:
+        print(f"File not found: {file_path}")
+    
+    return shares
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python3 analyze_smb_results.py <results_directory>")
+        sys.exit(1)
+    
+    results_dir = sys.argv[1]
+    
+    print("=" * 60)
+    print("SMB ENUMERATION ANALYSIS REPORT")
+    print("=" * 60)
+    print(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Results Directory: {results_dir}")
+    print()
+    
+    # Analyze users
+    users_file = os.path.join(results_dir, 'users.txt')
+    users = analyze_users(users_file)
+    print("DISCOVERED USERS:")
+    print("-" * 20)
+    if users:
+        for user in users:
+            print(f"  • {user}")
+    else:
+        print("  No users discovered")
+    print()
+    
+    # Analyze shares
+    shares_file = os.path.join(results_dir, 'shares.txt')
+    shares = analyze_shares(shares_file)
+    print("DISCOVERED SHARES:")
+    print("-" * 20)
+    if shares:
+        for share in shares:
+            print(f"  • {share}")
+    else:
+        print("  No shares discovered")
+    print()
+    
+    # Security recommendations
+    print("SECURITY RECOMMENDATIONS:")
+    print("-" * 30)
+    if users:
+        print("  • Review user accounts for unnecessary access")
+        print("  • Implement strong password policies")
+        print("  • Consider disabling unused accounts")
+    
+    if shares:
+        print("  • Review share permissions")
+        print("  • Remove unnecessary shares")
+        print("  • Implement access controls")
+    
+    print("  • Disable SMB v1 if still enabled")
+    print("  • Monitor SMB access logs regularly")
+
+if __name__ == "__main__":
+    main()
+EOF
+
+chmod +x analyze_smb_results.py
+Run the analysis on your enumeration results:
+
+python3 analyze_smb_results.py smb_enum_*
+Task 2: Python Scripts for Automated SMB Enumeration
+Subtask 2.1: Creating a Basic SMB Scanner
+Let's create a Python script that automates SMB enumeration for multiple targets:
+
+#!/usr/bin/env python3
+"""
+SMB Network Scanner
+Automates SMB enumeration across multiple targets
+"""
+
+import subprocess
+import threading
+import argparse
+import ipaddress
+import os
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+class SMBScanner:
+    def __init__(self, max_threads=10):
+        self.max_threads = max_threads
+        self.results = {}
+        self.lock = threading.Lock()
+    
+    def check_smb_port(self, target, port=445, timeout=3):
+        """Check if SMB port is open"""
+        try:
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            result = sock.connect_ex((str(target), port))
+            sock.close()
+            return result == 0
+        except Exception:
+            return False
+    
+    def run_enum4linux(self, target):
+        """Run enum4linux against a target"""
+        try:
+            # Create output directory
+            output_dir = f"smb_scan_{target}_{int(time.time())}"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Run enum4linux
+            cmd = ['enum4linux', '-a', str(target)]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            # Save results
+            output_file = os.path.join(output_dir, 'enum4linux_output.txt')
+            with open(output_file, 'w') as f:
+                f.write(f"Target: {target}\n")
+                f.write(f"Command: {' '.join(cmd)}\n")
+                f.write("=" * 60 + "\n")
+                f.write(result.stdout)
+                if result.stderr:
+                    f.write("\nERRORS:\n")
+                    f.write(result.stderr)
+            
+            return {
+                'target': str(target),
+                'success': result.returncode == 0,
+                'output_file': output_file,
+                'stdout': result.stdout,
+                'stderr': result.stderr
+            }
+            
+        except subprocess.TimeoutExpired:
+            return {
+                'target': str(target),
+                'success': False,
+                'error': 'Timeout expired',
+                'output_file': None
+            }
+        except Exception as e:
+            return {
+                'target': str(target),
+                'success': False,
+                'error': str(e),
+                'output_file': None
+            }
+    
+    def scan_target(self, target):
+        """Scan a single target"""
+        print(f"[+] Scanning {target}...")
+        
+        # Check if SMB port is open
+        if not self.check_smb_port(target):
+            print(f"[-] SMB port 445 closed on {target}")
+            return {
+                'target': str(target),
+                'success': False,
+                'error': 'SMB port closed'
+            }
+        
+        print(f"[+] SMB port open on {target}, running enumeration...")
+        result = self.run_enum4linux(target)
+        
+        with self.lock:
+            self.results[str(target)] = result
+        
+        if result['success']:
+            print(f"[+] Enumeration completed for {target}")
+        else:
+            print(f"[-] Enumeration failed for {target}: {result.get('error', 'Unknown error')}")
+        
+        return result
+    
+    def scan_network(self, targets):
+        """Scan multiple targets concurrently"""
+        print(f"[+] Starting SMB enumeration scan of {len(targets)} targets")
+        print(f"[+] Using {self.max_threads} threads")
+        
+        with ThreadPoolExecutor(max_workers=self.max_threads) as executor:
+            future_to_target = {executor.submit(self.scan_target, target): target for target in targets}
+            
+            for future in as_completed(future_to_target):
+                target = future_to_target[future]
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    print(f"[-] {target} generated an exception: {exc}")
+    
+    def generate_report(self, output_file='smb_scan_report.txt'):
+        """Generate a summary report"""
+        successful_scans = [r for r in self.results.values() if r['success']]
+        failed_scans = [r for r in self.results.values() if not r['success']]
+        
+        with open(output_file, 'w') as f:
+            f.write("SMB ENUMERATION SCAN REPORT\n")
+            f.write("=" * 50 + "\n")
+            f.write(f"Scan Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Total Targets: {len(self.results)}\n")
+            f.write(f"Successful Scans: {len(successful_scans)}\n")
+            f.write(f"Failed Scans: {len(failed_scans)}\n\n")
+            
+            if successful_scans:
+                f.write("SUCCESSFUL SCANS:\n")
+                f.write("-" * 20 + "\n")
+                for result in successful_scans:
+                    f.write(f"Target: {result['target']}\n")
+                    f.write(f"Output File: {result['output_file']}\n\n")
+            
+            if failed_scans:
+                f.write("FAILED SCANS:\n")
+                f.write("-" * 15 + "\n")
+                for result in failed_scans:
+                    f.write(f"Target: {result['target']}\n")
+                    f.write(f"Error: {result.get('error', 'Unknown')}\n\n")
+        
+        print(f"[+] Report saved to {output_file}")
+
+def parse_targets(target_input):
+    """Parse target input (single IP, CIDR, or file)"""
+    targets = []
+    
+    if os.path.isfile(target_input):
+        # Read targets from file
+        with open(target_input, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    targets.append(line)
+    else:
+        try:
+            # Try to parse as network
+            network = ipaddress.ip_network(target_input, strict=False)
+            targets = [str(ip) for ip in network.hosts()]
+        except ValueError:
+            # Single IP
+            targets = [target_input]
+    
+    return targets
+
+def main():
+    parser = argparse.ArgumentParser(description='Automated SMB Enumeration Scanner')
+    parser.add_argument('targets', help='Target IP, CIDR network, or file containing targets')
+    parser.add_argument('-t', '--threads', type=int, default=10, help='Number of threads (default: 10)')
+    parser.add_argument('-o', '--output', default='smb_scan_report.txt', help='Output report file')
+    
+    args = parser.parse_args()
+    
+    # Parse targets
+    targets = parse_targets(args.targets)
+    
+    if not targets:
+        print("[-] No valid targets found")
+        return
+    
+    print(f"[+] Parsed {len(targets)} targets")
+    
+    # Create scanner and run scan
+    scanner = SMBScanner(max_threads=args.threads)
+    scanner.scan_network(targets)
+    
+    # Generate report
+    scanner.generate_report(args.output)
+    
+    print("[+] Scan completed!")
+
+if __name__ == "__main__":
+    main()
+Save this script as smb_network_scanner.py and make it executable:
+
+chmod +x smb_network_scanner.py
+Subtask 2.2: Creating a Target List
+Create a file with target IPs for testing:
+
+cat > targets.txt << 'EOF'
+127.0.0.1
+# Add more IPs as needed
+# 192.168.1.100
+# 192.168.1.101
+EOF
+Subtask 2.3: Running the Automated Scanner
+Test the scanner with different input methods:
+
+# Scan a single target
+python3 smb_network_scanner.py 127.0.0.1
+
+# Scan from a file
+python3 smb_network_scanner.py targets.txt
+
+# Scan a network range (if you have a test network)
+# python3 smb_network_scanner.py 192.168.1.0/24
+Subtask 2.4: Advanced SMB Enumeration Script
+Create an advanced script that performs detailed analysis:
+
+#!/usr/bin/env python3
+"""
+Advanced SMB Enumeration and Analysis Tool
+"""
+
+import subprocess
+import json
+import re
+import os
+import argparse
+from datetime import datetime
+
+class AdvancedSMBAnalyzer:
+    def __init__(self):
+        self.results = {}
+    
+    def extract_users(self, enum_output):
+        """Extract user information from enum4linux output"""
+        users = []
+        
+        # Pattern for user entries
+        user_patterns = [
+            r'user:\[([^\]]+)\]',
+            r'S-1-5-21-\d+-\d+-\d+-\d+\s+(\w+)\s+\(Local User\)',
+            r'(\w+)\s+\(Local User\)'
+        ]
+        
+        for pattern in user_patterns:
+            matches = re.findall(pattern, enum_output, re.IGNORECASE)
+            users.extend(matches)
+        
+        # Remove duplicates and filter out system accounts
+        users = list(set(users))
+        system_accounts = ['nobody', 'root', 'daemon', 'bin', 'sys', 'sync', 'games', 'man', 'lp', 'mail', 'news', 'uucp', 'proxy', 'www-data', 'backup', 'list', 'irc', 'gnats']
+        users = [u for u in users if u.lower() not in system_accounts and len(u) > 2]
+        
+        return users
+    
+    def extract_shares(self, enum_output):
+        """Extract share information from enum4linux output"""
+        shares = []
+        
+        # Look for share enumeration section
+        share_section = re.search(r'Sharename\s+Type\s+Comment.*?\n(.*?)(?=\n\n|\Z)', enum_output, re.DOTALL)
+        
+        if share_section:
+            lines = share_section.group(1).split('\n')
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('-') and not line.startswith('Sharename'):
+                    parts = line.split()
+                    if parts and not parts[0] in ['IPC$', 'print$']:
+                        share_info = {
+                            'name': parts[0],
+                            'type': parts[1] if len(parts) > 1 else 'Unknown',
+                            'comment': ' '.join(parts[2:]) if len(parts) > 2 else ''
+                        }
+                        shares.append(share_info)
+        
+        return shares
+    
+    def extract_os_info(self, enum_output):
+        """Extract OS information"""
+        os_info = {}
+        
+        # OS information patterns
+        os_patterns = {
+            'os': r'OS=\[([^\]]+)\]',
+            'server': r'Server=\[([^\]]+)\]',
+            'domain': r'Domain=\[([^\]]+)\]',
+            'workgroup': r'Workgroup=\[([^\]]+)\]'
+        }
+        
+        for key, pattern in os_patterns.items():
+            match = re.search(pattern, enum_output)
+            if match:
+                os_info[key] = match.group(1)
+        
+        return os_info
+    
+    def assess_security_risks(self, target_data):
+        """Assess security risks based on enumeration results"""
+        risks = []
+        
+        users = target_data.get('users', [])
+        shares = target_data.get('shares', [])
+        
+        # Check for common weak usernames
+        weak_users = ['admin', 'administrator', 'guest', 'test', 'user', 'demo']
+        found_weak_users = [u for u in users if u.lower() in weak_users]
+        if found_weak_users:
+            risks.append({
+                'level': 'HIGH',
+                'type': 'Weak Usernames',
+                'description': f'Found common weak usernames: {", ".join(found_weak_users)}',
+                'recommendation': 'Rename or disable accounts with predictable names'
+            })
+        
+        # Check for excessive shares
+        if len(shares) > 5:
+            risks.append({
+                'level': 'MEDIUM',
+                'type': 'Excessive Shares',
+                'description': f'Found {len(shares)} shares which may indicate over-sharing',
+                'recommendation': 'Review and remove unnecessary shares'
+            })
+        
+        # Check for shares with concerning names
+        risky_share_names = ['backup', 'admin', 'confidential', 'private', 'secret']
+        risky_shares = [s['name'] for s in shares if any(risk in s['name'].lower() for risk in risky_share_names)]
+        if risky_shares:
+            risks.append({
+                'level': 'HIGH',
+                'type': 'Sensitive Share Names',
+                'description': f'Found shares with sensitive names: {", ".join(risky_shares)}',
+                'recommendation': 'Review permissions and consider renaming sensitive shares'
+            })
+        
+        return risks
+    
+    def analyze_target(self, target, enum_output):
+        """Perform comprehensive analysis of a target"""
+        analysis = {
+            'target': target,
+            'timestamp': datetime.now().isoformat(),
+            'users': self.extract_users(enum_output),
+            'shares': self.extract_shares(enum_output),
+            'os_info': self.extract_os_info(enum_output),
+            'raw_output': enum_output
+        }
+        
+        # Assess security risks
+        analysis['security_risks'] = self.assess_security_risks(analysis)
+        
+        return analysis
+    
+    def run_enumeration(self, target):
+        """Run enum4linux against target"""
+        try:
+            cmd = ['enum4linux', '-a', target]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode == 0:
+                return result.stdout
+            else:
+                print(f"[-] enum4linux failed for {target}: {result.stderr}")
+                return None
+                
+        except subprocess.TimeoutExpired:
+            print(f"[-] Timeout scanning {target}")
+            return None
+        except Exception as e:
+            print(f"[-] Error scanning {target}: {e}")
+            return None
+    
+    def generate_detailed_report(self, output_file='detailed_smb_report.json'):
+        """Generate detailed JSON report"""
+        with open(output_file, 'w') as f:
+            json.dump(self.results, f, indent=2)
+        
+        print(f"[+] Detailed report saved to {output_file}")
+    
+    def generate_summary_report(self, output_file='smb_summary_report.txt'):
+        """Generate human-readable summary report"""
+        with open(output_file, 'w') as f:
+            f.write("SMB ENUMERATION SUMMARY REPORT\n")
+            f.write("=" * 50 + "\n")
+            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Targets Analyzed: {len(self.results)}\n\n")
+            
+            for target, data in self.results.items():
+                f.write(f"TARGET: {target}\n")
+                f.write("-" * 30 + "\n")
+                
+                # OS Information
+                if data.get('os_info'):
+                    f.write("OS Information:\n")
+                    for key, value in data['os_info'].items():
+                        f.write(f"  {key.capitalize()}: {value}\n")
+                    f.write("\n")
+                
+                # Users
+                users = data.get('users', [])
+                f.write(f"Users Found ({len(users)}):\n")
+                for user in users:
+                    f.write(f"  • {user}\n")
+                f.write("\n")
+                
+                # Shares
+                shares = data.get('shares', [])
+                f.write(f"Shares Found ({len(shares)}):\n")
+                for share in shares:
+                    f.write(f"  • {share['name']} ({share['type']}) - {share['comment']}\n")
+                f.write("\n")
+                
+                # Security Risks
+                risks = data.get('security_risks', [])
+                if risks:
+                    f.write("Security Risks:\n")
+                    for risk in risks:
+                        f.write(f"  [{risk['level']}] {risk['type']}\n")
+                        f.write(f"    Description: {risk['description']}\n")
+                        f.write(f"    Recommendation: {risk['recommendation']}\n")
+                    f.write("\n")
+                
+                f.write("=" * 50 + "\n\n")
+        
+        print(f"[+] Summary report saved to {output_file}")
+
+def main():
+    parser = argparse.ArgumentParser(description='Advanced SMB Enumeration and Analysis')
+    parser.add_argument('target', help='Target IP address')
+    parser.add_argument('--json-output', default='detailed_smb_report.json', help='JSON output file')
+    parser.add_argument('--summary-output', default='smb_summary_report.txt', help='Summary output file')
+    
+    args = parser.parse_args()
+    
+    analyzer = AdvancedSMBAnalyzer()
+    
+    print(f"[+] Starting advanced SMB analysis of {args.target}")
+    
+    # Run enumeration
+    enum_output = analyzer.run_enumeration(args.target)
+    
+    if enum_output:
+        # Analyze results
+        analysis = analyzer.analyze_target(args.target, enum_output)
+        analyzer.results[args.target] = analysis
+        
+        # Generate reports
+        analyzer.generate_detailed_report(args.json_output)
+        analyzer.generate_summary_report(args.summary_output)
+        
+        print(f"[+] Analysis completed for {args.target}")
+        
+        # Print quick summary
+        print(f"[+] Found {len(analysis['users'])} users and {len(analysis['shares'])} shares")
+        if analysis['security_risks']:
+            print(f"[!] Identified {len(analysis['security_risks'])} security risks")
+    else:
+        print(f"[-] Failed to enumerate {args.target}")
+
+if __name__ == "__main__":
+    main()
+Save this as advanced_smb_analyzer.py and make it executable:
+
+chmod +x advanced_smb_analyzer.py
+Subtask 2.5: Testing the Advanced Analyzer
+Run the advanced analyzer against your test target:
+
+python3 advanced_smb_analyzer.py 127.0.0.1
+This will generate both JSON and text reports with detailed analysis.
+
+Verification and Testing
+Verification Step 1: Confirm Tool Installation
+Verify all tools are working correctly:
+
+# Check enum4linux
+enum4linux --help | head -5
+
+# Check Python scripts
+python3 -c "import subprocess, threading, json; print('All modules available')"
+
+# Check Samba service
+sudo systemctl status smbd
+Verification Step 2: Test Basic Enumeration
+Run a basic enumeration test:
+
+enum4linux -U 127.0.0.1 | grep -i user
+Verification Step 3: Validate Script Functionality
+Test the network scanner with a single target:
+
+python3 smb_network_scanner.py 127.0.0.1 -t 1
+Check that output files are created and contain valid data.
+
+Troubleshooting Common Issues
+Issue 1: Enum4Linux Not Found
+If enum4linux is not installed:
+
+sudo apt update
+sudo apt install enum4linux -y
+Issue 2: SMB Service Not Starting
+If Samba service fails to start:
+
+# Check configuration syntax
+sudo testparm
+
+# Check service logs
+sudo journalctl -u smbd -f
+
+# Restart service
+sudo systemctl restart smbd
+Issue 3: Permission Denied Errors
+If you encounter permission issues:
+
+# Ensure proper permissions on Samba directories
+sudo chmod 755 /srv/samba/testshare
+sudo chown nobody:nogroup /srv/samba/testshare
+Issue 4: Python Script Errors
+If Python scripts fail:
+
+# Check Python version
+python3 --version
+
+# Install missing modules if needed
+pip3 install ipaddress
+Security Considerations
+When performing SMB enumeration in real environments:
+
+Authorization: Always ensure you have proper authorization before scanning
+Network Impact: Use appropriate thread limits to avoid overwhelming targets
+Logging: Be aware that enumeration activities are typically logged
+Legal Compliance: Follow all applicable laws and regulations
+Responsible Disclosure: Report findings through proper channels
+Conclusion
+In this lab, you have successfully:
+
+Mastered SMB Enumeration: Used Enum4Linux to extract comprehensive information from SMB services, including users, groups, shares, and system details
+Automated Large-Scale Scanning: Developed Python scripts capable of scanning multiple targets concurrently, making enumeration efficient for large networks
+Implemented Advanced Analysis: Created sophisticated analysis tools that not only gather information but also assess security risks and provide actionable recommendations
+Applied Practical Skills: Gained hands-on experience
