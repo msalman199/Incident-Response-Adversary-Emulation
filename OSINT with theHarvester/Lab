@@ -1,0 +1,699 @@
+with theHarvester
+Objectives
+By the end of this lab, students will be able to:
+
+Understand the fundamentals of Open-Source Intelligence (OSINT) gathering
+Install and configure theHarvester tool on Linux systems
+Use theHarvester to collect email addresses and subdomain information from various sources
+Analyze and interpret OSINT data for security assessment purposes
+Create automated Python scripts for report generation and data processing
+Apply OSINT techniques in incident response and adversary emulation scenarios
+Understand the legal and ethical considerations of OSINT activities
+Prerequisites
+Before starting this lab, students should have:
+
+Basic understanding of Linux command-line operations
+Fundamental knowledge of networking concepts (domains, subdomains, DNS)
+Basic Python programming skills
+Understanding of cybersecurity principles
+Familiarity with text editors (nano, vim, or gedit)
+Knowledge of file system navigation in Linux
+Lab Environment
+Ready-to-Use Cloud Machines: Al Nafi provides Linux-based cloud machines for this lab. Simply click Start Lab to access your pre-configured environment. No need to build your own virtual machine or set up additional infrastructure.
+
+Your lab environment includes:
+
+Ubuntu Linux machine with internet connectivity
+Pre-installed Python 3 and pip package manager
+Administrative privileges for tool installation
+Text editors and development tools
+Task 1: Installing and Configuring theHarvester
+Subtask 1.1: Update System and Install Dependencies
+First, ensure your system is up-to-date and install necessary dependencies.
+
+# Update package lists
+sudo apt update
+
+# Install Python3 and pip if not already installed
+sudo apt install python3 python3-pip git -y
+
+# Install additional dependencies
+sudo apt install python3-requests python3-beautifulsoup4 -y
+Subtask 1.2: Install theHarvester
+Install theHarvester using the official repository for the most current version.
+
+# Navigate to home directory
+cd ~
+
+# Clone theHarvester repository
+git clone https://github.com/laramies/theHarvester.git
+
+# Navigate to theHarvester directory
+cd theHarvester
+
+# Install Python requirements
+pip3 install -r requirements.txt
+
+# Make theHarvester executable
+chmod +x theHarvester.py
+Subtask 1.3: Verify Installation
+Test that theHarvester is properly installed and functional.
+
+# Check theHarvester help menu
+python3 theHarvester.py -h
+
+# List available search engines
+python3 theHarvester.py -h | grep -A 20 "engines"
+Task 2: Basic OSINT Gathering with theHarvester
+Subtask 2.1: Gather Email Addresses
+Learn to collect email addresses from a target domain using multiple sources.
+
+# Basic email harvesting from a domain (using example.com as safe target)
+python3 theHarvester.py -d example.com -l 100 -b google
+
+# Use multiple sources for comprehensive results
+python3 theHarvester.py -d example.com -l 100 -b google,bing,yahoo
+
+# Save results to file
+python3 theHarvester.py -d example.com -l 100 -b google,bing -f example_emails
+Key Parameters Explained:
+
+-d: Target domain
+-l: Limit number of results
+-b: Search engines/sources to use
+-f: Output filename
+Subtask 2.2: Subdomain Enumeration
+Discover subdomains associated with the target domain.
+
+# Enumerate subdomains using DNS sources
+python3 theHarvester.py -d example.com -l 200 -b dnsdumpster
+
+# Use multiple subdomain sources
+python3 theHarvester.py -d example.com -l 200 -b dnsdumpster,crtsh,virustotal
+
+# Save subdomain results
+python3 theHarvester.py -d example.com -l 200 -b dnsdumpster,crtsh -f example_subdomains
+Subtask 2.3: Comprehensive Information Gathering
+Combine multiple data types for thorough reconnaissance.
+
+# Comprehensive scan with multiple sources
+python3 theHarvester.py -d example.com -l 300 -b all -f comprehensive_scan
+
+# Specific source combination for balanced results
+python3 theHarvester.py -d example.com -l 200 -b google,bing,dnsdumpster,crtsh,virustotal -f balanced_scan
+Task 3: Advanced theHarvester Techniques
+Subtask 3.1: Using API Keys for Enhanced Results
+Configure API keys for better data collection from premium sources.
+
+# Create API keys configuration directory
+mkdir -p ~/.theHarvester
+
+# Create API keys file (example configuration)
+cat > ~/.theHarvester/api-keys.yaml << EOF
+apikeys:
+  shodan: your_shodan_api_key_here
+  virustotal: your_virustotal_api_key_here
+  hunter: your_hunter_api_key_here
+EOF
+Note: Replace placeholder API keys with actual keys from respective services for enhanced functionality.
+
+Subtask 3.2: Passive DNS Reconnaissance
+Perform passive DNS lookups to gather historical DNS data.
+
+# Use passive DNS sources
+python3 theHarvester.py -d example.com -l 150 -b passivetotal
+
+# Combine with certificate transparency logs
+python3 theHarvester.py -d example.com -l 150 -b crtsh,certspotter
+Subtask 3.3: Social Media and Professional Networks
+Gather information from social media and professional platforms.
+
+# Search LinkedIn for employee information
+python3 theHarvester.py -d example.com -l 100 -b linkedin
+
+# Search Twitter for mentions and accounts
+python3 theHarvester.py -d example.com -l 100 -b twitter
+Task 4: Creating Python Automation Scripts
+Subtask 4.1: Basic Report Generation Script
+Create a Python script to automate theHarvester execution and generate formatted reports.
+
+#!/usr/bin/env python3
+"""
+theHarvester Automation Script
+Automates OSINT gathering and generates formatted reports
+"""
+
+import subprocess
+import json
+import datetime
+import os
+import sys
+
+class HarvesterAutomation:
+    def __init__(self, domain, output_dir="harvester_reports"):
+        self.domain = domain
+        self.output_dir = output_dir
+        self.timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Create output directory
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+    
+    def run_harvester(self, sources, limit=200):
+        """Run theHarvester with specified sources"""
+        output_file = f"{self.output_dir}/{self.domain}_{self.timestamp}"
+        
+        cmd = [
+            "python3", "theHarvester.py",
+            "-d", self.domain,
+            "-l", str(limit),
+            "-b", sources,
+            "-f", output_file
+        ]
+        
+        try:
+            print(f"Running theHarvester for {self.domain}...")
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=".")
+            
+            if result.returncode == 0:
+                print(f"Successfully completed scan for {self.domain}")
+                return output_file
+            else:
+                print(f"Error running theHarvester: {result.stderr}")
+                return None
+                
+        except Exception as e:
+            print(f"Exception occurred: {str(e)}")
+            return None
+    
+    def generate_report(self, scan_results):
+        """Generate formatted HTML report"""
+        report_file = f"{self.output_dir}/{self.domain}_report_{self.timestamp}.html"
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>OSINT Report for {self.domain}</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                .header {{ background-color: #f0f0f0; padding: 10px; }}
+                .section {{ margin: 20px 0; }}
+                .data {{ background-color: #f9f9f9; padding: 10px; border-left: 3px solid #007acc; }}
+                pre {{ background-color: #f5f5f5; padding: 10px; overflow-x: auto; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>OSINT Report for {self.domain}</h1>
+                <p>Generated on: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
+            </div>
+            
+            <div class="section">
+                <h2>Scan Summary</h2>
+                <div class="data">
+                    <p><strong>Target Domain:</strong> {self.domain}</p>
+                    <p><strong>Scan Date:</strong> {self.timestamp}</p>
+                    <p><strong>Tools Used:</strong> theHarvester</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>Raw Results</h2>
+                <pre>{scan_results}</pre>
+            </div>
+        </body>
+        </html>
+        """
+        
+        with open(report_file, 'w') as f:
+            f.write(html_content)
+        
+        print(f"Report generated: {report_file}")
+        return report_file
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python3 harvester_automation.py <domain>")
+        sys.exit(1)
+    
+    domain = sys.argv[1]
+    harvester = HarvesterAutomation(domain)
+    
+    # Run comprehensive scan
+    sources = "google,bing,dnsdumpster,crtsh"
+    output_file = harvester.run_harvester(sources)
+    
+    if output_file:
+        # Read results and generate report
+        try:
+            with open(f"{output_file}.json", 'r') as f:
+                results = f.read()
+            harvester.generate_report(results)
+        except FileNotFoundError:
+            print("Results file not found, generating basic report")
+            harvester.generate_report("Scan completed - check individual result files")
+
+if __name__ == "__main__":
+    main()
+Save this script as harvester_automation.py:
+
+# Create the automation script
+nano harvester_automation.py
+# Copy and paste the above Python code, then save and exit
+
+# Make the script executable
+chmod +x harvester_automation.py
+Subtask 4.2: Advanced Data Processing Script
+Create a more sophisticated script for data analysis and visualization.
+
+#!/usr/bin/env python3
+"""
+Advanced theHarvester Data Processor
+Processes and analyzes OSINT data with enhanced reporting
+"""
+
+import subprocess
+import json
+import csv
+import re
+import datetime
+import os
+from collections import defaultdict
+
+class AdvancedHarvesterProcessor:
+    def __init__(self, domain):
+        self.domain = domain
+        self.timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.results = {
+            'emails': [],
+            'subdomains': [],
+            'hosts': [],
+            'urls': []
+        }
+    
+    def extract_emails(self, text):
+        """Extract email addresses from text"""
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        emails = re.findall(email_pattern, text)
+        return list(set(emails))  # Remove duplicates
+    
+    def extract_subdomains(self, text):
+        """Extract subdomains from text"""
+        subdomain_pattern = rf'\b[\w.-]*\.{re.escape(self.domain)}\b'
+        subdomains = re.findall(subdomain_pattern, text, re.IGNORECASE)
+        return list(set(subdomains))
+    
+    def process_harvester_output(self, output_text):
+        """Process theHarvester output and categorize findings"""
+        self.results['emails'] = self.extract_emails(output_text)
+        self.results['subdomains'] = self.extract_subdomains(output_text)
+        
+        # Additional processing for hosts and URLs
+        lines = output_text.split('\n')
+        for line in lines:
+            if 'http' in line.lower():
+                self.results['urls'].append(line.strip())
+    
+    def generate_csv_report(self):
+        """Generate CSV reports for each data type"""
+        reports = []
+        
+        # Email report
+        email_file = f"emails_{self.domain}_{self.timestamp}.csv"
+        with open(email_file, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['Email', 'Domain'])
+            for email in self.results['emails']:
+                domain_part = email.split('@')[1] if '@' in email else ''
+                writer.writerow([email, domain_part])
+        reports.append(email_file)
+        
+        # Subdomain report
+        subdomain_file = f"subdomains_{self.domain}_{self.timestamp}.csv"
+        with open(subdomain_file, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['Subdomain', 'Root Domain'])
+            for subdomain in self.results['subdomains']:
+                writer.writerow([subdomain, self.domain])
+        reports.append(subdomain_file)
+        
+        return reports
+    
+    def generate_statistics(self):
+        """Generate statistics about the findings"""
+        stats = {
+            'total_emails': len(self.results['emails']),
+            'total_subdomains': len(self.results['subdomains']),
+            'total_urls': len(self.results['urls']),
+            'unique_email_domains': len(set([email.split('@')[1] for email in self.results['emails'] if '@' in email]))
+        }
+        return stats
+    
+    def create_comprehensive_report(self):
+        """Create a comprehensive JSON report"""
+        report_data = {
+            'scan_info': {
+                'target_domain': self.domain,
+                'scan_timestamp': self.timestamp,
+                'scan_date': datetime.datetime.now().isoformat()
+            },
+            'statistics': self.generate_statistics(),
+            'findings': self.results
+        }
+        
+        report_file = f"comprehensive_report_{self.domain}_{self.timestamp}.json"
+        with open(report_file, 'w') as f:
+            json.dump(report_data, f, indent=2)
+        
+        return report_file
+
+def run_automated_scan(domain):
+    """Run automated theHarvester scan with multiple sources"""
+    processor = AdvancedHarvesterProcessor(domain)
+    
+    # Define source combinations
+    source_sets = [
+        "google,bing",
+        "dnsdumpster,crtsh",
+        "virustotal"
+    ]
+    
+    all_output = ""
+    
+    for sources in source_sets:
+        print(f"Running scan with sources: {sources}")
+        cmd = [
+            "python3", "theHarvester.py",
+            "-d", domain,
+            "-l", "200",
+            "-b", sources
+        ]
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=".")
+            if result.returncode == 0:
+                all_output += result.stdout + "\n"
+                print(f"Completed scan with {sources}")
+            else:
+                print(f"Error with {sources}: {result.stderr}")
+        except Exception as e:
+            print(f"Exception with {sources}: {str(e)}")
+    
+    # Process all collected output
+    processor.process_harvester_output(all_output)
+    
+    # Generate reports
+    csv_reports = processor.generate_csv_report()
+    json_report = processor.create_comprehensive_report()
+    
+    print(f"\nScan completed for {domain}")
+    print(f"Generated reports:")
+    for report in csv_reports + [json_report]:
+        print(f"  - {report}")
+    
+    return processor.results
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) != 2:
+        print("Usage: python3 advanced_processor.py <domain>")
+        sys.exit(1)
+    
+    domain = sys.argv[1]
+    results = run_automated_scan(domain)
+    
+    # Display summary
+    print(f"\nSummary for {domain}:")
+    print(f"Emails found: {len(results['emails'])}")
+    print(f"Subdomains found: {len(results['subdomains'])}")
+    print(f"URLs found: {len(results['urls'])}")
+Save this script as advanced_processor.py:
+
+# Create the advanced processing script
+nano advanced_processor.py
+# Copy and paste the above Python code, then save and exit
+
+# Make the script executable
+chmod +x advanced_processor.py
+Task 5: Practical OSINT Scenarios
+Subtask 5.1: Incident Response Scenario
+Simulate an incident response scenario where you need to gather intelligence about a potentially compromised domain.
+
+# Create incident response directory
+mkdir incident_response_lab
+cd incident_response_lab
+
+# Run comprehensive scan for incident analysis
+python3 ../theHarvester.py -d example.com -l 500 -b all -f incident_analysis
+
+# Generate detailed report
+python3 ../advanced_processor.py example.com
+Subtask 5.2: Adversary Emulation Exercise
+Practice adversary emulation by gathering reconnaissance data as an attacker would.
+
+# Create adversary emulation directory
+mkdir adversary_emulation
+cd adversary_emulation
+
+# Phase 1: Initial reconnaissance
+python3 ../theHarvester.py -d example.com -l 100 -b google,bing -f phase1_recon
+
+# Phase 2: Deep enumeration
+python3 ../theHarvester.py -d example.com -l 300 -b dnsdumpster,crtsh,virustotal -f phase2_enum
+
+# Phase 3: Social engineering preparation
+python3 ../theHarvester.py -d example.com -l 200 -b linkedin,twitter -f phase3_social
+Task 6: Data Analysis and Reporting
+Subtask 6.1: Manual Data Analysis
+Learn to manually analyze theHarvester output for actionable intelligence.
+
+# Navigate back to theHarvester directory
+cd ~/theHarvester
+
+# Analyze email patterns
+grep -i "@" *.txt | sort | uniq > unique_emails.txt
+
+# Analyze subdomain patterns
+grep -E "([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}" *.txt | sort | uniq > unique_subdomains.txt
+
+# Count findings
+echo "Email addresses found: $(wc -l < unique_emails.txt)"
+echo "Subdomains found: $(wc -l < unique_subdomains.txt)"
+Subtask 6.2: Creating Visual Reports
+Generate visual representations of your findings using simple text-based charts.
+
+#!/usr/bin/env python3
+"""
+Simple visualization script for theHarvester results
+"""
+
+import matplotlib.pyplot as plt
+import json
+import sys
+from collections import Counter
+
+def create_simple_charts(json_file):
+    """Create simple charts from JSON data"""
+    try:
+        with open(json_file, 'r') as f:
+            data = json.load(f)
+        
+        # Email domain distribution
+        emails = data['findings']['emails']
+        email_domains = [email.split('@')[1] for email in emails if '@' in email]
+        domain_counts = Counter(email_domains)
+        
+        # Print text-based chart
+        print("Email Domain Distribution:")
+        print("-" * 30)
+        for domain, count in domain_counts.most_common(10):
+            bar = "█" * count
+            print(f"{domain:20} {bar} ({count})")
+        
+        # Subdomain analysis
+        subdomains = data['findings']['subdomains']
+        print(f"\nTotal Subdomains Found: {len(subdomains)}")
+        print("Top Subdomains:")
+        print("-" * 20)
+        for i, subdomain in enumerate(subdomains[:10], 1):
+            print(f"{i:2}. {subdomain}")
+        
+    except Exception as e:
+        print(f"Error processing file: {e}")
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Usage: python3 visualize_results.py <json_report_file>")
+        sys.exit(1)
+    
+    create_simple_charts(sys.argv[1])
+Save and run the visualization script:
+
+# Create visualization script
+nano visualize_results.py
+# Copy and paste the above code
+
+# Make executable
+chmod +x visualize_results.py
+
+# Run with your JSON report
+python3 visualize_results.py comprehensive_report_example.com_*.json
+Task 7: Security and Legal Considerations
+Subtask 7.1: Understanding Legal Boundaries
+Create a checklist for legal OSINT activities:
+
+# Create legal compliance checklist
+cat > osint_legal_checklist.txt << EOF
+OSINT Legal Compliance Checklist
+================================
+
+Before conducting OSINT activities:
+
+□ Ensure you have proper authorization
+□ Only target domains you own or have permission to test
+□ Respect robots.txt and terms of service
+□ Do not exceed reasonable request rates
+□ Document your activities for compliance
+□ Avoid accessing private or restricted information
+□ Follow your organization's security policies
+□ Consider data protection regulations (GDPR, etc.)
+
+Safe Practice Domains for Testing:
+- example.com (IANA reserved)
+- test.com (if owned by your organization)
+- Your own registered domains
+
+Remember: OSINT should only collect publicly available information!
+EOF
+
+cat osint_legal_checklist.txt
+Subtask 7.2: Implementing Rate Limiting
+Modify your scripts to include respectful rate limiting:
+
+#!/usr/bin/env python3
+"""
+Rate-limited theHarvester wrapper
+"""
+
+import time
+import subprocess
+import sys
+
+def rate_limited_harvest(domain, sources, delay=5):
+    """Run theHarvester with rate limiting between requests"""
+    source_list = sources.split(',')
+    
+    for source in source_list:
+        print(f"Scanning {domain} using {source}...")
+        
+        cmd = [
+            "python3", "theHarvester.py",
+            "-d", domain,
+            "-l", "50",  # Reduced limit for respectful scanning
+            "-b", source,
+            "-f", f"{domain}_{source}"
+        ]
+        
+        try:
+            subprocess.run(cmd, cwd=".")
+            print(f"Completed scan with {source}")
+            
+            # Rate limiting delay
+            if source != source_list[-1]:  # Don't delay after last source
+                print(f"Waiting {delay} seconds before next scan...")
+                time.sleep(delay)
+                
+        except Exception as e:
+            print(f"Error with {source}: {e}")
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python3 rate_limited_harvest.py <domain> <sources>")
+        print("Example: python3 rate_limited_harvest.py example.com google,bing")
+        sys.exit(1)
+    
+    domain = sys.argv[1]
+    sources = sys.argv[2]
+    
+    rate_limited_harvest(domain, sources)
+Troubleshooting Common Issues
+Issue 1: theHarvester Installation Problems
+# If installation fails, try alternative method
+pip3 install --user theHarvester
+
+# Or install from PyPI
+pip3 install theHarvester
+
+# Check Python path
+which python3
+python3 --version
+Issue 2: Missing Dependencies
+# Install missing Python modules
+pip3 install requests beautifulsoup4 plotly
+
+# Update pip if needed
+python3 -m pip install --upgrade pip
+Issue 3: Permission Errors
+# Fix file permissions
+chmod +x theHarvester.py
+chmod +x *.py
+
+# Check directory permissions
+ls -la
+Issue 4: Network Connectivity Issues
+# Test internet connectivity
+ping -c 4 google.com
+
+# Check DNS resolution
+nslookup example.com
+
+# Test specific search engines
+curl -I https://www.google.com
+Lab Verification and Testing
+Verification Checklist
+Complete these steps to verify your lab setup:
+
+# 1. Verify theHarvester installation
+python3 theHarvester.py -h | head -10
+
+# 2. Test basic functionality
+python3 theHarvester.py -d example.com -l 10 -b google
+
+# 3. Check script functionality
+python3 harvester_automation.py example.com
+
+# 4. Verify report generation
+ls -la *.html *.json *.csv
+
+# 5. Test advanced processor
+python3 advanced_processor.py example.com
+Expected Outputs
+After completing the lab, you should have:
+
+Successfully installed theHarvester
+Generated email and subdomain lists
+Created automated Python scripts
+Produced HTML, JSON, and CSV reports
+Demonstrated understanding of legal considerations
+Conclusion
+In this comprehensive lab, you have successfully learned to perform Open-Source Intelligence (OSINT) gathering using theHarvester. You have accomplished the following key objectives:
+
+Technical Skills Developed:
+
+Installed and configured theHarvester on a Linux system
+Executed various OSINT gathering techniques to collect emails and subdomains
+Created automated Python scripts for report generation and data processing
+Implemented rate limiting and respectful scanning practices
+Generated multiple report formats for different stakeholder needs
+Practical Applications:
+
+Conducted incident response reconnaissance scenarios
+Performed adversary emulation exercises
+Analyzed and visualized OSINT data for actionable intelligence
+Applied legal and ethical considerations to OSINT activities
+Why This Matters: OSINT gathering is a critical skill in cybersecurity, forming the foundation of threat intelligence, incident response, and security assessments. The techniques you have learned enable security professionals to understand their organization's digital footprint, identify potential attack vectors, and gather intelligence about threats. These skills are essential for roles in incident response, threat hunting, penetration testing, and security analysis.
+
+The automation scripts you created demonstrate how to scale OSINT operations efficiently while maintaining ethical standards. This lab has prepared you with practical skills directly applicable to real-world cybersecurity scenarios, supporting your preparation for incident response and adversary emulation certifications.
+
+Remember to always conduct OSINT activities within legal boundaries and with proper authorization, using these powerful techniques responsibly to enhance organizational security posture.
