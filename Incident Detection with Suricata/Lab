@@ -1,0 +1,730 @@
+Incident Detection with Suricata
+Objectives
+By the end of this lab, students will be able to:
+
+Install and configure Suricata network intrusion detection system (NIDS)
+Create and customize Suricata detection rules
+Generate test network traffic to simulate potential threats
+Analyze Suricata logs to identify security incidents
+Interpret alert data and understand threat indicators
+Implement basic incident response procedures based on Suricata findings
+Prerequisites
+Before starting this lab, students should have:
+
+Basic understanding of Linux command line operations
+Fundamental knowledge of networking concepts (TCP/IP, ports, protocols)
+Basic familiarity with log file analysis
+Understanding of cybersecurity concepts like intrusion detection
+Knowledge of text editors like nano or vim
+Lab Environment
+Al Nafi provides ready-to-use Linux-based cloud machines for this lab. Simply click Start Lab to access your pre-configured Ubuntu environment. No need to build your own virtual machine or set up additional infrastructure.
+
+Task 1: Install and Configure Suricata
+Subtask 1.1: Update System and Install Suricata
+First, we need to update our system and install Suricata along with necessary dependencies.
+
+# Update package repositories
+sudo apt update && sudo apt upgrade -y
+
+# Install Suricata and required packages
+sudo apt install suricata suricata-update jq -y
+
+# Verify installation
+suricata --version
+Subtask 1.2: Configure Suricata Network Interface
+Configure Suricata to monitor the correct network interface.
+
+# Check available network interfaces
+ip addr show
+
+# Edit Suricata configuration file
+sudo nano /etc/suricata/suricata.yaml
+In the configuration file, locate the af-packet section and modify it:
+
+af-packet:
+  - interface: eth0  # Replace with your actual interface name
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+Also, update the HOME_NET variable to match your network:
+
+vars:
+  address-groups:
+    HOME_NET: "[192.168.1.0/24,10.0.0.0/8,172.16.0.0/12]"
+    EXTERNAL_NET: "!$HOME_NET"
+Subtask 1.3: Update Suricata Rules
+Download and update the latest threat detection rules.
+
+# Update Suricata rules
+sudo suricata-update
+
+# Enable additional rule sources
+sudo suricata-update add-source emerging-threats https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz
+
+# Update rules with new sources
+sudo suricata-update
+Subtask 1.4: Create Custom Detection Rules
+Create custom rules for specific threats we'll test.
+
+# Create custom rules directory
+sudo mkdir -p /etc/suricata/rules/custom
+
+# Create custom rule file
+sudo nano /etc/suricata/rules/custom/lab-rules.rules
+Add the following custom rules:
+
+# Detect ICMP ping attempts
+alert icmp any any -> $HOME_NET any (msg:"ICMP Ping Detected"; sid:1000001; rev:1;)
+
+# Detect HTTP traffic to suspicious domains
+alert http any any -> any any (msg:"Suspicious HTTP Request"; content:"malware"; http_uri; sid:1000002; rev:1;)
+
+# Detect SSH brute force attempts
+alert tcp any any -> $HOME_NET 22 (msg:"Potential SSH Brute Force"; flags:S; threshold:type both, track by_src, count 5, seconds 60; sid:1000003; rev:1;)
+
+# Detect DNS queries to suspicious domains
+alert dns any any -> any any (msg:"Suspicious DNS Query"; dns_query; content:"malicious"; sid:1000004; rev:1;)
+
+# Detect large file downloads
+alert http any any -> any any (msg:"Large File Download"; filesize:>1000000; sid:1000005; rev:1;)
+Subtask 1.5: Configure Suricata to Use Custom Rules
+Edit the main configuration to include our custom rules.
+
+# Edit Suricata configuration
+sudo nano /etc/suricata/suricata.yaml
+Find the rule-files section and add our custom rules:
+
+rule-files:
+  - suricata.rules
+  - custom/lab-rules.rules
+Subtask 1.6: Test Suricata Configuration
+Verify that our configuration is correct.
+
+# Test Suricata configuration
+sudo suricata -T -c /etc/suricata/suricata.yaml -v
+
+# If configuration is valid, you should see "Configuration provided was successfully loaded"
+Task 2: Generate and Analyze Test Traffic
+Subtask 2.1: Start Suricata in Detection Mode
+Start Suricata to begin monitoring network traffic.
+
+# Start Suricata in daemon mode
+sudo suricata -c /etc/suricata/suricata.yaml -i eth0 -D
+
+# Verify Suricata is running
+sudo systemctl status suricata
+ps aux | grep suricata
+Subtask 2.2: Generate ICMP Test Traffic
+Create test traffic to trigger our ICMP detection rule.
+
+# Generate ICMP ping traffic
+ping -c 10 8.8.8.8
+
+# Ping localhost to trigger internal network alerts
+ping -c 5 127.0.0.1
+Subtask 2.3: Generate HTTP Test Traffic
+Create HTTP traffic that will trigger our detection rules.
+
+# Install curl if not present
+sudo apt install curl -y
+
+# Generate suspicious HTTP requests
+curl -s "http://httpbin.org/get?malware=test" > /dev/null
+curl -s "http://httpbin.org/user-agent" -H "User-Agent: malicious-bot" > /dev/null
+
+# Generate multiple HTTP requests
+for i in {1..10}; do
+    curl -s "http://httpbin.org/status/200" > /dev/null
+    sleep 1
+done
+Subtask 2.4: Generate SSH Connection Attempts
+Simulate SSH brute force attempts to trigger our SSH rule.
+
+# Install nmap for connection testing
+sudo apt install nmap -y
+
+# Simulate multiple SSH connection attempts
+for i in {1..6}; do
+    timeout 2 nc -z 127.0.0.1 22
+    sleep 1
+done
+Subtask 2.5: Generate DNS Test Traffic
+Create DNS queries that will trigger our DNS detection rules.
+
+# Install dig for DNS queries
+sudo apt install dnsutils -y
+
+# Generate suspicious DNS queries
+dig @8.8.8.8 malicious.example.com
+dig @8.8.8.8 test-malware.com
+dig @8.8.8.8 normal-website.com
+Subtask 2.6: Analyze Suricata Logs
+Now let's examine the logs generated by our test traffic.
+
+# Check Suricata log directory
+ls -la /var/log/suricata/
+
+# View fast.log for quick alert overview
+sudo tail -f /var/log/suricata/fast.log
+Press Ctrl+C to stop the tail command, then examine specific log files:
+
+# View detailed alerts in eve.json
+sudo tail -20 /var/log/suricata/eve.json | jq '.'
+
+# Filter for alert events only
+sudo cat /var/log/suricata/eve.json | jq 'select(.event_type=="alert")'
+
+# Count alerts by signature
+sudo cat /var/log/suricata/eve.json | jq -r 'select(.event_type=="alert") | .alert.signature' | sort | uniq -c
+Subtask 2.7: Create Log Analysis Script
+Create a script to analyze Suricata logs more effectively.
+
+# Create analysis script
+nano suricata_analyzer.sh
+Add the following content:
+
+#!/bin/bash
+
+LOG_FILE="/var/log/suricata/eve.json"
+
+echo "=== Suricata Log Analysis Report ==="
+echo "Generated on: $(date)"
+echo
+
+# Check if log file exists
+if [ ! -f "$LOG_FILE" ]; then
+    echo "Error: Suricata log file not found at $LOG_FILE"
+    exit 1
+fi
+
+# Total number of events
+echo "Total Events: $(wc -l < $LOG_FILE)"
+
+# Alert summary
+echo
+echo "=== Alert Summary ==="
+sudo cat $LOG_FILE | jq -r 'select(.event_type=="alert") | .alert.signature' | sort | uniq -c | sort -nr
+
+# Top source IPs generating alerts
+echo
+echo "=== Top Source IPs ==="
+sudo cat $LOG_FILE | jq -r 'select(.event_type=="alert") | .src_ip' | sort | uniq -c | sort -nr | head -10
+
+# Alert severity breakdown
+echo
+echo "=== Alert Severity ==="
+sudo cat $LOG_FILE | jq -r 'select(.event_type=="alert") | .alert.severity' | sort | uniq -c
+
+# Recent alerts (last 10)
+echo
+echo "=== Recent Alerts ==="
+sudo tail -10 $LOG_FILE | jq -r 'select(.event_type=="alert") | "\(.timestamp) - \(.alert.signature) - \(.src_ip):\(.src_port) -> \(.dest_ip):\(.dest_port)"'
+
+echo
+echo "=== Analysis Complete ==="
+Make the script executable and run it:
+
+# Make script executable
+chmod +x suricata_analyzer.sh
+
+# Run analysis
+./suricata_analyzer.sh
+Subtask 2.8: Real-time Alert Monitoring
+Set up real-time monitoring of Suricata alerts.
+
+# Create real-time monitoring script
+nano monitor_alerts.sh
+Add the following content:
+
+#!/bin/bash
+
+LOG_FILE="/var/log/suricata/eve.json"
+
+echo "Starting real-time Suricata alert monitoring..."
+echo "Press Ctrl+C to stop"
+echo
+
+# Monitor for new alerts
+sudo tail -f $LOG_FILE | while read line; do
+    # Check if line contains an alert
+    if echo "$line" | jq -e 'select(.event_type=="alert")' > /dev/null 2>&1; then
+        TIMESTAMP=$(echo "$line" | jq -r '.timestamp')
+        SIGNATURE=$(echo "$line" | jq -r '.alert.signature')
+        SRC_IP=$(echo "$line" | jq -r '.src_ip')
+        DEST_IP=$(echo "$line" | jq -r '.dest_ip')
+        SEVERITY=$(echo "$line" | jq -r '.alert.severity')
+        
+        echo "ALERT: [$TIMESTAMP] $SIGNATURE"
+        echo "  Source: $SRC_IP -> Destination: $DEST_IP"
+        echo "  Severity: $SEVERITY"
+        echo "  ---"
+    fi
+done
+Make it executable:
+
+chmod +x monitor_alerts.sh
+Task 3: Advanced Traffic Analysis and Incident Response
+Subtask 3.1: Generate Complex Attack Scenarios
+Create more sophisticated attack patterns to test Suricata's detection capabilities.
+
+# Create attack simulation script
+nano attack_simulator.sh
+Add the following content:
+
+#!/bin/bash
+
+echo "Starting attack simulation scenarios..."
+
+# Scenario 1: Port scanning simulation
+echo "Scenario 1: Port scanning simulation"
+nmap -sS -O 127.0.0.1 > /dev/null 2>&1
+
+# Scenario 2: HTTP directory traversal attempt
+echo "Scenario 2: HTTP directory traversal"
+curl -s "http://httpbin.org/get?file=../../../etc/passwd" > /dev/null
+
+# Scenario 3: SQL injection attempt
+echo "Scenario 3: SQL injection simulation"
+curl -s "http://httpbin.org/get?id=1' OR '1'='1" > /dev/null
+
+# Scenario 4: Multiple failed SSH attempts
+echo "Scenario 4: SSH brute force simulation"
+for i in {1..10}; do
+    timeout 1 ssh -o ConnectTimeout=1 fake_user@127.0.0.1 2>/dev/null
+    sleep 0.5
+done
+
+# Scenario 5: DNS tunneling simulation
+echo "Scenario 5: DNS tunneling simulation"
+for subdomain in data1 data2 data3 malicious; do
+    dig @8.8.8.8 ${subdomain}.suspicious-domain.com > /dev/null 2>&1
+    sleep 1
+done
+
+echo "Attack simulation complete. Check Suricata logs for detections."
+Make it executable and run:
+
+chmod +x attack_simulator.sh
+./attack_simulator.sh
+Subtask 3.2: Create Incident Response Playbook
+Create a basic incident response playbook based on Suricata alerts.
+
+# Create incident response script
+nano incident_response.sh
+Add the following content:
+
+#!/bin/bash
+
+LOG_FILE="/var/log/suricata/eve.json"
+INCIDENT_DIR="/tmp/incident_$(date +%Y%m%d_%H%M%S)"
+
+echo "=== Incident Response Playbook ==="
+echo "Creating incident directory: $INCIDENT_DIR"
+mkdir -p "$INCIDENT_DIR"
+
+# Step 1: Collect recent alerts
+echo "Step 1: Collecting recent alerts..."
+sudo cat $LOG_FILE | jq 'select(.event_type=="alert")' > "$INCIDENT_DIR/alerts.json"
+
+# Step 2: Identify high-severity alerts
+echo "Step 2: Identifying high-severity alerts..."
+sudo cat $LOG_FILE | jq 'select(.event_type=="alert" and .alert.severity <= 2)' > "$INCIDENT_DIR/high_severity_alerts.json"
+
+# Step 3: Extract unique source IPs
+echo "Step 3: Extracting suspicious source IPs..."
+sudo cat $LOG_FILE | jq -r 'select(.event_type=="alert") | .src_ip' | sort | uniq > "$INCIDENT_DIR/suspicious_ips.txt"
+
+# Step 4: Generate timeline
+echo "Step 4: Generating incident timeline..."
+sudo cat $LOG_FILE | jq -r 'select(.event_type=="alert") | "\(.timestamp) | \(.alert.signature) | \(.src_ip) -> \(.dest_ip)"' | sort > "$INCIDENT_DIR/timeline.txt"
+
+# Step 5: Create summary report
+echo "Step 5: Creating summary report..."
+cat > "$INCIDENT_DIR/incident_summary.txt" << EOF
+Incident Response Summary
+Generated: $(date)
+
+Total Alerts: $(wc -l < "$INCIDENT_DIR/alerts.json")
+High Severity Alerts: $(wc -l < "$INCIDENT_DIR/high_severity_alerts.json")
+Unique Source IPs: $(wc -l < "$INCIDENT_DIR/suspicious_ips.txt")
+
+Top 5 Alert Types:
+$(sudo cat $LOG_FILE | jq -r 'select(.event_type=="alert") | .alert.signature' | sort | uniq -c | sort -nr | head -5)
+
+Recommended Actions:
+1. Review high-severity alerts in detail
+2. Investigate suspicious source IPs
+3. Check for patterns in the timeline
+4. Consider blocking malicious IPs
+5. Update detection rules if needed
+EOF
+
+echo "Incident response data collected in: $INCIDENT_DIR"
+echo "Review the following files:"
+ls -la "$INCIDENT_DIR"
+Make it executable and run:
+
+chmod +x incident_response.sh
+./incident_response.sh
+Subtask 3.3: Performance Monitoring and Tuning
+Monitor Suricata's performance and optimize if needed.
+
+# Check Suricata statistics
+sudo cat /var/log/suricata/stats.log | tail -20
+
+# Create performance monitoring script
+nano performance_monitor.sh
+Add the following content:
+
+#!/bin/bash
+
+echo "=== Suricata Performance Monitor ==="
+echo "Timestamp: $(date)"
+echo
+
+# Check if Suricata is running
+if pgrep suricata > /dev/null; then
+    echo "Status: Suricata is running"
+    
+    # Get process information
+    echo "Process Information:"
+    ps aux | grep suricata | grep -v grep
+    echo
+    
+    # Check memory usage
+    echo "Memory Usage:"
+    pmap $(pgrep suricata) | tail -1
+    echo
+    
+    # Check recent statistics
+    echo "Recent Statistics (last 5 entries):"
+    sudo tail -5 /var/log/suricata/stats.log
+    echo
+    
+    # Check log file sizes
+    echo "Log File Sizes:"
+    ls -lh /var/log/suricata/
+    
+else
+    echo "Status: Suricata is not running"
+    echo "Use 'sudo systemctl start suricata' to start the service"
+fi
+Make it executable and run:
+
+chmod +x performance_monitor.sh
+./performance_monitor.sh
+Task 4: Log Analysis and Reporting
+Subtask 4.1: Create Comprehensive Log Parser
+Develop a comprehensive log parsing tool for detailed analysis.
+
+# Create advanced log parser
+nano advanced_parser.py
+Add the following Python script:
+
+#!/usr/bin/env python3
+
+import json
+import sys
+from datetime import datetime
+from collections import defaultdict, Counter
+
+def parse_suricata_logs(log_file):
+    """Parse Suricata eve.json log file and generate comprehensive report"""
+    
+    alerts = []
+    stats = defaultdict(int)
+    
+    try:
+        with open(log_file, 'r') as f:
+            for line in f:
+                try:
+                    event = json.loads(line.strip())
+                    if event.get('event_type') == 'alert':
+                        alerts.append(event)
+                        stats['total_alerts'] += 1
+                except json.JSONDecodeError:
+                    continue
+    except FileNotFoundError:
+        print(f"Error: Log file {log_file} not found")
+        return
+    
+    if not alerts:
+        print("No alerts found in log file")
+        return
+    
+    # Generate report
+    print("=" * 60)
+    print("SURICATA LOG ANALYSIS REPORT")
+    print("=" * 60)
+    print(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Total Alerts: {len(alerts)}")
+    print()
+    
+    # Alert signatures
+    signatures = Counter(alert['alert']['signature'] for alert in alerts)
+    print("TOP ALERT SIGNATURES:")
+    print("-" * 40)
+    for sig, count in signatures.most_common(10):
+        print(f"{count:4d} | {sig}")
+    print()
+    
+    # Source IPs
+    src_ips = Counter(alert['src_ip'] for alert in alerts)
+    print("TOP SOURCE IPs:")
+    print("-" * 40)
+    for ip, count in src_ips.most_common(10):
+        print(f"{count:4d} | {ip}")
+    print()
+    
+    # Destination ports
+    dest_ports = Counter(alert.get('dest_port', 'N/A') for alert in alerts)
+    print("TOP DESTINATION PORTS:")
+    print("-" * 40)
+    for port, count in dest_ports.most_common(10):
+        print(f"{count:4d} | {port}")
+    print()
+    
+    # Severity distribution
+    severities = Counter(alert['alert']['severity'] for alert in alerts)
+    print("SEVERITY DISTRIBUTION:")
+    print("-" * 40)
+    for severity, count in sorted(severities.items()):
+        severity_name = {1: 'High', 2: 'Medium', 3: 'Low'}.get(severity, 'Unknown')
+        print(f"{count:4d} | Severity {severity} ({severity_name})")
+    print()
+    
+    # Timeline analysis
+    print("ALERT TIMELINE (Last 10 alerts):")
+    print("-" * 40)
+    recent_alerts = sorted(alerts, key=lambda x: x['timestamp'])[-10:]
+    for alert in recent_alerts:
+        timestamp = alert['timestamp'][:19]  # Remove microseconds
+        signature = alert['alert']['signature'][:50]  # Truncate long signatures
+        src_ip = alert['src_ip']
+        print(f"{timestamp} | {src_ip} | {signature}")
+
+if __name__ == "__main__":
+    log_file = "/var/log/suricata/eve.json"
+    parse_suricata_logs(log_file)
+Make it executable and run:
+
+chmod +x advanced_parser.py
+sudo python3 advanced_parser.py
+Subtask 4.2: Create Alert Dashboard
+Create a simple text-based dashboard for monitoring alerts.
+
+# Create dashboard script
+nano alert_dashboard.sh
+Add the following content:
+
+#!/bin/bash
+
+LOG_FILE="/var/log/suricata/eve.json"
+
+# Function to display dashboard
+show_dashboard() {
+    clear
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║                    SURICATA ALERT DASHBOARD                  ║"
+    echo "╠══════════════════════════════════════════════════════════════╣"
+    echo "║ Last Updated: $(date)                    ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo
+    
+    # Total alerts today
+    TODAY=$(date +%Y-%m-%d)
+    TOTAL_TODAY=$(sudo grep "$TODAY" $LOG_FILE | jq -s 'map(select(.event_type=="alert")) | length' 2>/dev/null || echo "0")
+    echo "📊 Alerts Today: $TOTAL_TODAY"
+    echo
+    
+    # Recent alerts (last 5)
+    echo "🚨 Recent Alerts:"
+    echo "─────────────────────────────────────────────────────────────"
+    sudo tail -20 $LOG_FILE | jq -r 'select(.event_type=="alert") | "\(.timestamp[11:19]) | \(.alert.signature) | \(.src_ip)"' 2>/dev/null | tail -5 | while read line; do
+        echo "   $line"
+    done
+    echo
+    
+    # Top threats
+    echo "🎯 Top Threats (Last 100 alerts):"
+    echo "─────────────────────────────────────────────────────────────"
+    sudo tail -100 $LOG_FILE | jq -r 'select(.event_type=="alert") | .alert.signature' 2>/dev/null | sort | uniq -c | sort -nr | head -5 | while read count signature; do
+        printf "   %3d | %s\n" "$count" "$signature"
+    done
+    echo
+    
+    # System status
+    echo "⚙️  System Status:"
+    echo "─────────────────────────────────────────────────────────────"
+    if pgrep suricata > /dev/null; then
+        echo "   ✅ Suricata: Running"
+    else
+        echo "   ❌ Suricata: Stopped"
+    fi
+    
+    DISK_USAGE=$(df /var/log | tail -1 | awk '{print $5}')
+    echo "   💾 Log Disk Usage: $DISK_USAGE"
+    echo
+    
+    echo "Press Ctrl+C to exit, or wait 30 seconds for refresh..."
+}
+
+# Main loop
+while true; do
+    show_dashboard
+    sleep 30
+done
+Make it executable and run:
+
+chmod +x alert_dashboard.sh
+./alert_dashboard.sh
+Task 5: Rule Optimization and Custom Detection
+Subtask 5.1: Create Advanced Custom Rules
+Develop more sophisticated detection rules based on our analysis.
+
+# Create advanced rules file
+sudo nano /etc/suricata/rules/custom/advanced-rules.rules
+Add the following advanced rules:
+
+# Detect multiple failed login attempts
+alert tcp any any -> $HOME_NET 22 (msg:"SSH Brute Force Attack Detected"; flow:to_server,established; content:"SSH"; threshold:type both, track by_src, count 10, seconds 300; sid:2000001; rev:1;)
+
+# Detect suspicious user agents
+alert http any any -> any any (msg:"Suspicious User Agent Detected"; http_user_agent; content:"bot"; nocase; sid:2000002; rev:1;)
+
+# Detect large data exfiltration
+alert tcp $HOME_NET any -> !$HOME_NET any (msg:"Potential Data Exfiltration"; dsize:>10000; threshold:type both, track by_src, count 5, seconds 60; sid:2000003; rev:1;)
+
+# Detect DNS over HTTPS (DoH) usage
+alert tls any any -> any 443 (msg:"DNS over HTTPS Detected"; tls_sni; content:"cloudflare-dns.com"; sid:2000004; rev:1;)
+
+# Detect cryptocurrency mining traffic
+alert tcp any any -> any any (msg:"Cryptocurrency Mining Detected"; content:"stratum+tcp"; sid:2000005; rev:1;)
+
+# Detect file upload attempts
+alert http any any -> any any (msg:"File Upload Detected"; http_method; content:"POST"; http_header; content:"multipart/form-data"; sid:2000006; rev:1;)
+Update the configuration to include these rules:
+
+# Edit Suricata configuration
+sudo nano /etc/suricata/suricata.yaml
+Add to the rule-files section:
+
+rule-files:
+  - suricata.rules
+  - custom/lab-rules.rules
+  - custom/advanced-rules.rules
+Subtask 5.2: Test Advanced Rules
+Restart Suricata and test the new rules.
+
+# Test configuration
+sudo suricata -T -c /etc/suricata/suricata.yaml -v
+
+# Restart Suricata
+sudo systemctl restart suricata
+
+# Generate test traffic for advanced rules
+curl -s -H "User-Agent: malicious-bot-scanner" "http://httpbin.org/get" > /dev/null
+
+# Test file upload detection
+curl -s -X POST -F "file=@/etc/passwd" "http://httpbin.org/post" > /dev/null
+Subtask 5.3: Rule Performance Analysis
+Create a script to analyze rule performance.
+
+# Create rule performance analyzer
+nano rule_performance.sh
+Add the following content:
+
+#!/bin/bash
+
+LOG_FILE="/var/log/suricata/eve.json"
+
+echo "=== Suricata Rule Performance Analysis ==="
+echo "Analysis Date: $(date)"
+echo
+
+# Rule hit statistics
+echo "Rule Hit Statistics (Top 20):"
+echo "─────────────────────────────────────────────────────────────"
+sudo cat $LOG_FILE | jq -r 'select(.event_type=="alert") | "\(.alert.gid):\(.alert.signature_id) - \(.alert.signature)"' | sort | uniq -c | sort -nr | head -20
+
+echo
+echo "Custom Rule Performance:"
+echo "─────────────────────────────────────────────────────────────"
+sudo cat $LOG_FILE | jq -r 'select(.event_type=="alert" and (.alert.signature_id >= 1000000 or .alert.signature_id >= 2000000)) | "\(.alert.signature_id) - \(.alert.signature)"' | sort | uniq -c | sort -nr
+
+echo
+echo "Rule Efficiency Metrics:"
+echo "─────────────────────────────────────────────────────────────"
+TOTAL_ALERTS=$(sudo cat $LOG_FILE | jq -s 'map(select(.event_type=="alert")) | length')
+CUSTOM_ALERTS=$(sudo cat $LOG_FILE | jq -s 'map(select(.event_type=="alert" and (.alert.signature_id >= 1000000 or .alert.signature_id >= 2000000))) | length')
+
+echo "Total Alerts: $TOTAL_ALERTS"
+echo "Custom Rule Alerts: $CUSTOM_ALERTS"
+
+if [ "$TOTAL_ALERTS" -gt 0 ]; then
+    PERCENTAGE=$(echo "scale=2; $CUSTOM_ALERTS * 100 / $TOTAL_ALERTS" | bc -l 2>/dev/null || echo "N/A")
+    echo "Custom Rule Coverage: $PERCENTAGE%"
+fi
+Make it executable and run:
+
+chmod +x rule_performance.sh
+./rule_performance.sh
+Troubleshooting Common Issues
+Issue 1: Suricata Won't Start
+# Check Suricata status
+sudo systemctl status suricata
+
+# Check configuration syntax
+sudo suricata -T -c /etc/suricata/suricata.yaml -v
+
+# Check log files for errors
+sudo tail -50 /var/log/suricata/suricata.log
+Issue 2: No Alerts Generated
+# Verify rules are loaded
+sudo suricata --list-app-layer-protos
+
+# Check if interface is correct
+ip addr show
+
+# Verify network traffic is being captured
+sudo tcpdump -i eth0 -c 10
+Issue 3: High CPU Usage
+# Check Suricata process
+top -p $(pgrep suricata)
+
+# Optimize configuration for performance
+sudo nano /etc/suricata/suricata.yaml
+# Reduce threading or adjust buffer sizes
+Issue 4: Log Files Growing Too Large
+# Set up log rotation
+sudo nano /etc/logrotate.d/suricata
+Add the following configuration:
+
+/var/log/suricata/*.log {
+    daily
+    missingok
+    rotate 7
+    compress
+    notifempty
+    create 640 root adm
+    postrotate
+        /bin/kill -HUP $(cat /var/run/suricata.pid 2>/dev/null) 2>/dev/null || true
+    endscript
+}
+Conclusion
+In this comprehensive lab, you have successfully:
+
+Installed and configured Suricata as a network intrusion detection system on a single Linux machine
+Created custom detection rules tailored to specific threats and attack patterns
+Generated realistic test traffic to simulate various types of network attacks and suspicious activities
+Analyzed Suricata logs using multiple tools and techniques to identify security incidents
+Developed automated scripts for log analysis, performance monitoring, and incident response
+Implemented advanced detection capabilities with sophisticated rules and real-time monitoring
+Created comprehensive reporting tools to visualize and understand security events
+This lab demonstrates the practical application of network intrusion detection in a real-world cybersecurity environment. The skills you've developed here are directly applicable to:
+
+Security Operations Center (SOC) operations where analysts monitor and respond to security alerts
+Incident response procedures that require rapid identification and analysis of security events
+Threat hunting activities that involve proactive searching for indicators of compromise
+Network security monitoring in enterprise environments
+The open-source tools and techniques you've mastered provide a solid foundation for advanced cybersecurity roles and prepare you for industry certifications in incident response and adversary emulation. Remember that effective incident detection requires continuous monitoring, rule tuning, and staying updated with the latest threat intelligence to maintain robust network security posture.
