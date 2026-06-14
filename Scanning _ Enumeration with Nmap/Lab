@@ -1,0 +1,669 @@
+Scanning & Enumeration with Nmap
+Objectives
+By the end of this lab, students will be able to:
+
+Understand the fundamentals of network scanning and enumeration using Nmap
+Perform various types of network scans including host discovery, port scanning, and service detection
+Identify open ports, running services, and operating system information on target systems
+Create and execute Bash scripts to automate port scanning and service discovery tasks
+Analyze Nmap scan results to identify potential security vulnerabilities
+Apply proper scanning techniques for incident response and adversary emulation scenarios
+Prerequisites
+Before starting this lab, students should have:
+
+Basic understanding of networking concepts (IP addresses, ports, protocols)
+Familiarity with Linux command line interface
+Basic knowledge of Bash scripting fundamentals
+Understanding of TCP/IP protocol suite
+Knowledge of common network services and their default ports
+Lab Environment
+Al Nafi Cloud Machine Setup: This lab runs entirely on Al Nafi's provided Linux-based cloud machines. Simply click Start Lab to access your pre-configured environment. No additional VM setup or configuration is required.
+
+System Requirements:
+
+Linux machine with Nmap installed
+Root or sudo privileges
+Network connectivity
+Text editor (nano, vim, or gedit)
+Task 1: Perform Network Scans Using Nmap
+Subtask 1.1: Verify Nmap Installation and Basic Setup
+First, let's ensure Nmap is properly installed and understand its basic functionality.
+
+Step 1: Check if Nmap is installed on your system:
+
+nmap --version
+Step 2: If Nmap is not installed, install it using the package manager:
+
+sudo apt update
+sudo apt install nmap -y
+Step 3: Verify the installation was successful:
+
+which nmap
+Step 4: Check your current IP address to understand your network environment:
+
+ip addr show
+hostname -I
+Subtask 1.2: Host Discovery Scanning
+Host discovery helps identify active hosts on a network before performing detailed scans.
+
+Step 1: Perform a ping scan to discover active hosts on your local network:
+
+nmap -sn 127.0.0.0/24
+Step 2: Scan the localhost specifically:
+
+nmap -sn 127.0.0.1
+Step 3: Perform an ARP scan (if you have network access):
+
+sudo nmap -PR 127.0.0.1
+Step 4: Create a simple target list file for future scans:
+
+echo "127.0.0.1" > targets.txt
+echo "localhost" >> targets.txt
+Subtask 1.3: Basic Port Scanning
+Now let's perform various types of port scans to identify open services.
+
+Step 1: Perform a basic TCP connect scan on localhost:
+
+nmap 127.0.0.1
+Step 2: Scan specific ports:
+
+nmap -p 22,80,443,3306 127.0.0.1
+Step 3: Scan a range of ports:
+
+nmap -p 1-1000 127.0.0.1
+Step 4: Perform a comprehensive scan of all 65535 ports:
+
+nmap -p- 127.0.0.1
+Note: The full port scan may take several minutes to complete.
+
+Subtask 1.4: Advanced Scanning Techniques
+Let's explore more sophisticated scanning methods.
+
+Step 1: Perform a SYN scan (stealth scan):
+
+sudo nmap -sS 127.0.0.1
+Step 2: Perform a UDP scan:
+
+sudo nmap -sU 127.0.0.1
+Step 3: Combine TCP and UDP scanning:
+
+sudo nmap -sS -sU -p 1-100 127.0.0.1
+Step 4: Perform an aggressive scan with service detection:
+
+nmap -A 127.0.0.1
+Subtask 1.5: Service and Version Detection
+Service enumeration helps identify specific services and their versions.
+
+Step 1: Enable service version detection:
+
+nmap -sV 127.0.0.1
+Step 2: Increase version detection intensity:
+
+nmap -sV --version-intensity 9 127.0.0.1
+Step 3: Perform OS detection:
+
+sudo nmap -O 127.0.0.1
+Step 4: Combine service and OS detection:
+
+sudo nmap -sV -O 127.0.0.1
+Subtask 1.6: Using Nmap Scripts
+Nmap Scripting Engine (NSE) provides additional enumeration capabilities.
+
+Step 1: List available Nmap scripts:
+
+ls /usr/share/nmap/scripts/ | head -20
+Step 2: Run default scripts:
+
+nmap -sC 127.0.0.1
+Step 3: Run specific vulnerability scripts:
+
+nmap --script vuln 127.0.0.1
+Step 4: Run HTTP enumeration scripts:
+
+nmap --script http-enum 127.0.0.1
+Step 5: Get help for a specific script:
+
+nmap --script-help http-enum
+Task 2: Write a Bash Script to Automate Port Scanning and Service Discovery
+Subtask 2.1: Create Basic Scanning Script
+Let's create a comprehensive Bash script to automate our scanning tasks.
+
+Step 1: Create a new script file:
+
+nano nmap_scanner.sh
+Step 2: Add the following basic script structure:
+
+#!/bin/bash
+
+# Nmap Automated Scanner Script
+# Lab 9: Scanning & Enumeration with Nmap
+
+echo "========================================="
+echo "    Automated Nmap Scanner v1.0"
+echo "========================================="
+echo ""
+
+# Check if target is provided
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <target_ip>"
+    echo "Example: $0 127.0.0.1"
+    exit 1
+fi
+
+TARGET=$1
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+OUTPUT_DIR="nmap_results_${TIMESTAMP}"
+
+# Create output directory
+mkdir -p $OUTPUT_DIR
+
+echo "Target: $TARGET"
+echo "Output Directory: $OUTPUT_DIR"
+echo "Timestamp: $TIMESTAMP"
+echo ""
+Step 3: Make the script executable:
+
+chmod +x nmap_scanner.sh
+Subtask 2.2: Add Host Discovery Function
+Step 1: Edit the script to add host discovery functionality:
+
+nano nmap_scanner.sh
+Step 2: Add the following function after the initial setup:
+
+# Function: Host Discovery
+host_discovery() {
+    echo "[+] Starting Host Discovery..."
+    echo "    Performing ping scan..."
+    
+    nmap -sn $TARGET > $OUTPUT_DIR/host_discovery.txt 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo "    [SUCCESS] Host discovery completed"
+        echo "    Results saved to: $OUTPUT_DIR/host_discovery.txt"
+    else
+        echo "    [ERROR] Host discovery failed"
+    fi
+    echo ""
+}
+Subtask 2.3: Add Port Scanning Functions
+Step 1: Add comprehensive port scanning functions:
+
+# Function: Quick Port Scan
+quick_scan() {
+    echo "[+] Starting Quick Port Scan..."
+    echo "    Scanning top 1000 ports..."
+    
+    nmap -T4 -F $TARGET > $OUTPUT_DIR/quick_scan.txt 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo "    [SUCCESS] Quick scan completed"
+        echo "    Results saved to: $OUTPUT_DIR/quick_scan.txt"
+    else
+        echo "    [ERROR] Quick scan failed"
+    fi
+    echo ""
+}
+
+# Function: Comprehensive Port Scan
+comprehensive_scan() {
+    echo "[+] Starting Comprehensive Port Scan..."
+    echo "    Scanning all 65535 ports (this may take a while)..."
+    
+    nmap -p- -T4 $TARGET > $OUTPUT_DIR/comprehensive_scan.txt 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo "    [SUCCESS] Comprehensive scan completed"
+        echo "    Results saved to: $OUTPUT_DIR/comprehensive_scan.txt"
+    else
+        echo "    [ERROR] Comprehensive scan failed"
+    fi
+    echo ""
+}
+
+# Function: Service Detection
+service_detection() {
+    echo "[+] Starting Service Detection..."
+    echo "    Detecting services and versions..."
+    
+    nmap -sV -T4 $TARGET > $OUTPUT_DIR/service_detection.txt 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo "    [SUCCESS] Service detection completed"
+        echo "    Results saved to: $OUTPUT_DIR/service_detection.txt"
+    else
+        echo "    [ERROR] Service detection failed"
+    fi
+    echo ""
+}
+Subtask 2.4: Add Advanced Scanning Functions
+Step 1: Add OS detection and script scanning functions:
+
+# Function: OS Detection
+os_detection() {
+    echo "[+] Starting OS Detection..."
+    echo "    Attempting to identify operating system..."
+    
+    sudo nmap -O $TARGET > $OUTPUT_DIR/os_detection.txt 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo "    [SUCCESS] OS detection completed"
+        echo "    Results saved to: $OUTPUT_DIR/os_detection.txt"
+    else
+        echo "    [WARNING] OS detection may require root privileges"
+        echo "    Results saved to: $OUTPUT_DIR/os_detection.txt"
+    fi
+    echo ""
+}
+
+# Function: Vulnerability Scanning
+vulnerability_scan() {
+    echo "[+] Starting Vulnerability Scan..."
+    echo "    Running NSE vulnerability scripts..."
+    
+    nmap --script vuln -T4 $TARGET > $OUTPUT_DIR/vulnerability_scan.txt 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo "    [SUCCESS] Vulnerability scan completed"
+        echo "    Results saved to: $OUTPUT_DIR/vulnerability_scan.txt"
+    else
+        echo "    [ERROR] Vulnerability scan failed"
+    fi
+    echo ""
+}
+
+# Function: Aggressive Scan
+aggressive_scan() {
+    echo "[+] Starting Aggressive Scan..."
+    echo "    Performing comprehensive enumeration..."
+    
+    nmap -A -T4 $TARGET > $OUTPUT_DIR/aggressive_scan.txt 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo "    [SUCCESS] Aggressive scan completed"
+        echo "    Results saved to: $OUTPUT_DIR/aggressive_scan.txt"
+    else
+        echo "    [ERROR] Aggressive scan failed"
+    fi
+    echo ""
+}
+Subtask 2.5: Add Report Generation Function
+Step 1: Add a function to generate a summary report:
+
+# Function: Generate Summary Report
+generate_report() {
+    echo "[+] Generating Summary Report..."
+    
+    REPORT_FILE="$OUTPUT_DIR/scan_summary_report.txt"
+    
+    echo "=========================================" > $REPORT_FILE
+    echo "    NMAP SCAN SUMMARY REPORT" >> $REPORT_FILE
+    echo "=========================================" >> $REPORT_FILE
+    echo "" >> $REPORT_FILE
+    echo "Target: $TARGET" >> $REPORT_FILE
+    echo "Scan Date: $(date)" >> $REPORT_FILE
+    echo "Scan Duration: $(($(date +%s) - START_TIME)) seconds" >> $REPORT_FILE
+    echo "" >> $REPORT_FILE
+    
+    # Extract open ports from quick scan
+    echo "OPEN PORTS DISCOVERED:" >> $REPORT_FILE
+    echo "=====================" >> $REPORT_FILE
+    if [ -f "$OUTPUT_DIR/quick_scan.txt" ]; then
+        grep "open" $OUTPUT_DIR/quick_scan.txt >> $REPORT_FILE
+    fi
+    echo "" >> $REPORT_FILE
+    
+    # Extract service information
+    echo "SERVICES DETECTED:" >> $REPORT_FILE
+    echo "=================" >> $REPORT_FILE
+    if [ -f "$OUTPUT_DIR/service_detection.txt" ]; then
+        grep "open" $OUTPUT_DIR/service_detection.txt >> $REPORT_FILE
+    fi
+    echo "" >> $REPORT_FILE
+    
+    # List all generated files
+    echo "GENERATED FILES:" >> $REPORT_FILE
+    echo "===============" >> $REPORT_FILE
+    ls -la $OUTPUT_DIR/ >> $REPORT_FILE
+    
+    echo "    [SUCCESS] Summary report generated"
+    echo "    Report saved to: $REPORT_FILE"
+    echo ""
+}
+Subtask 2.6: Complete the Main Script Logic
+Step 1: Add the main execution logic at the end of the script:
+
+# Main execution
+START_TIME=$(date +%s)
+
+echo "Starting automated Nmap scan sequence..."
+echo ""
+
+# Execute scanning functions
+host_discovery
+quick_scan
+service_detection
+
+# Ask user if they want to run advanced scans
+echo "Do you want to run advanced scans? (OS detection, vulnerability scan, aggressive scan)"
+echo "Warning: These scans may take longer and require root privileges for some features."
+read -p "Continue with advanced scans? (y/n): " -n 1 -r
+echo ""
+
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "Running advanced scans..."
+    os_detection
+    vulnerability_scan
+    aggressive_scan
+fi
+
+# Generate final report
+generate_report
+
+echo "========================================="
+echo "    SCAN SEQUENCE COMPLETED"
+echo "========================================="
+echo ""
+echo "All results have been saved to: $OUTPUT_DIR/"
+echo "Summary report: $OUTPUT_DIR/scan_summary_report.txt"
+echo ""
+echo "To view the summary report:"
+echo "cat $OUTPUT_DIR/scan_summary_report.txt"
+Subtask 2.7: Test the Automated Scanner
+Step 1: Run the complete script:
+
+./nmap_scanner.sh 127.0.0.1
+Step 2: When prompted, choose whether to run advanced scans (type 'y' for yes or 'n' for no).
+
+Step 3: After completion, examine the generated results:
+
+ls -la nmap_results_*/
+Step 4: View the summary report:
+
+cat nmap_results_*/scan_summary_report.txt
+Subtask 2.8: Create an Enhanced Multi-Target Scanner
+Step 1: Create an advanced script for scanning multiple targets:
+
+nano advanced_nmap_scanner.sh
+Step 2: Add the following enhanced script:
+
+#!/bin/bash
+
+# Advanced Multi-Target Nmap Scanner
+# Lab 9: Scanning & Enumeration with Nmap
+
+echo "========================================="
+echo "  Advanced Multi-Target Nmap Scanner"
+echo "========================================="
+echo ""
+
+# Function to display usage
+usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  -t <target>     Single target (IP or hostname)"
+    echo "  -f <file>       File containing list of targets"
+    echo "  -p <ports>      Specific ports to scan (e.g., 22,80,443)"
+    echo "  -o <output>     Output directory name"
+    echo "  -q              Quick scan only"
+    echo "  -a              Include aggressive scans"
+    echo "  -h              Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 -t 127.0.0.1 -p 22,80,443"
+    echo "  $0 -f targets.txt -a"
+    echo "  $0 -t localhost -q -o my_scan_results"
+    exit 1
+}
+
+# Default values
+TARGETS=""
+TARGET_FILE=""
+PORTS=""
+OUTPUT_DIR=""
+QUICK_ONLY=false
+AGGRESSIVE=false
+
+# Parse command line arguments
+while getopts "t:f:p:o:qah" opt; do
+    case $opt in
+        t) TARGETS="$OPTARG" ;;
+        f) TARGET_FILE="$OPTARG" ;;
+        p) PORTS="$OPTARG" ;;
+        o) OUTPUT_DIR="$OPTARG" ;;
+        q) QUICK_ONLY=true ;;
+        a) AGGRESSIVE=true ;;
+        h) usage ;;
+        *) usage ;;
+    esac
+done
+
+# Validate input
+if [ -z "$TARGETS" ] && [ -z "$TARGET_FILE" ]; then
+    echo "Error: Must specify either a target (-t) or target file (-f)"
+    usage
+fi
+
+# Set default output directory if not specified
+if [ -z "$OUTPUT_DIR" ]; then
+    OUTPUT_DIR="advanced_scan_$(date +%Y%m%d_%H%M%S)"
+fi
+
+# Create output directory
+mkdir -p "$OUTPUT_DIR"
+
+echo "Configuration:"
+echo "  Targets: ${TARGETS:-$TARGET_FILE}"
+echo "  Ports: ${PORTS:-All common ports}"
+echo "  Output: $OUTPUT_DIR"
+echo "  Quick only: $QUICK_ONLY"
+echo "  Aggressive: $AGGRESSIVE"
+echo ""
+
+# Function to scan a single target
+scan_target() {
+    local target=$1
+    local target_dir="$OUTPUT_DIR/${target//\//_}"
+    
+    mkdir -p "$target_dir"
+    
+    echo "[+] Scanning target: $target"
+    
+    # Basic port scan
+    if [ -n "$PORTS" ]; then
+        echo "    Scanning specified ports: $PORTS"
+        nmap -p "$PORTS" -T4 "$target" > "$target_dir/port_scan.txt" 2>&1
+    else
+        echo "    Scanning common ports..."
+        nmap -T4 "$target" > "$target_dir/port_scan.txt" 2>&1
+    fi
+    
+    # Service detection
+    if [ "$QUICK_ONLY" = false ]; then
+        echo "    Detecting services..."
+        nmap -sV -T4 "$target" > "$target_dir/service_detection.txt" 2>&1
+        
+        # Aggressive scan if requested
+        if [ "$AGGRESSIVE" = true ]; then
+            echo "    Running aggressive scan..."
+            nmap -A -T4 "$target" > "$target_dir/aggressive_scan.txt" 2>&1
+        fi
+    fi
+    
+    echo "    [COMPLETED] Results saved to: $target_dir/"
+    echo ""
+}
+
+# Main scanning logic
+if [ -n "$TARGETS" ]; then
+    # Single target
+    scan_target "$TARGETS"
+elif [ -n "$TARGET_FILE" ]; then
+    # Multiple targets from file
+    if [ ! -f "$TARGET_FILE" ]; then
+        echo "Error: Target file '$TARGET_FILE' not found"
+        exit 1
+    fi
+    
+    while IFS= read -r target; do
+        if [ -n "$target" ] && [[ ! "$target" =~ ^# ]]; then
+            scan_target "$target"
+        fi
+    done < "$TARGET_FILE"
+fi
+
+echo "========================================="
+echo "    ALL SCANS COMPLETED"
+echo "========================================="
+echo "Results saved to: $OUTPUT_DIR/"
+Step 3: Make the advanced script executable:
+
+chmod +x advanced_nmap_scanner.sh
+Step 4: Test the advanced scanner:
+
+./advanced_nmap_scanner.sh -t 127.0.0.1 -p 22,80,443,3306 -o test_scan
+Step 5: Test with the targets file we created earlier:
+
+./advanced_nmap_scanner.sh -f targets.txt -a -o multi_target_scan
+Verification and Analysis
+Analyzing Scan Results
+Step 1: Examine the different types of scan outputs:
+
+# View basic scan results
+cat nmap_results_*/quick_scan.txt
+
+# View service detection results
+cat nmap_results_*/service_detection.txt
+
+# View summary report
+cat nmap_results_*/scan_summary_report.txt
+Step 2: Identify key information from the scans:
+
+# Extract only open ports
+grep "open" nmap_results_*/quick_scan.txt
+
+# Extract service versions
+grep "open" nmap_results_*/service_detection.txt | grep -v "filtered"
+Step 3: Create a simple analysis script:
+
+nano analyze_results.sh
+#!/bin/bash
+
+# Simple Nmap Results Analyzer
+
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <results_directory>"
+    exit 1
+fi
+
+RESULTS_DIR=$1
+
+echo "========================================="
+echo "    NMAP RESULTS ANALYSIS"
+echo "========================================="
+echo ""
+
+# Count total open ports
+OPEN_PORTS=$(find "$RESULTS_DIR" -name "*.txt" -exec grep -h "open" {} \; | wc -l)
+echo "Total open ports found: $OPEN_PORTS"
+
+# List unique services
+echo ""
+echo "Services discovered:"
+echo "==================="
+find "$RESULTS_DIR" -name "*.txt" -exec grep -h "open" {} \; | awk '{print $3}' | sort | uniq
+
+# Show potential security concerns
+echo ""
+echo "Potential security concerns:"
+echo "============================"
+find "$RESULTS_DIR" -name "*.txt" -exec grep -i -H "vulnerable\|exploit\|weak" {} \;
+
+echo ""
+echo "Analysis complete."
+Step 4: Make the analysis script executable and run it:
+
+chmod +x analyze_results.sh
+./analyze_results.sh nmap_results_*
+Troubleshooting Common Issues
+Issue 1: Permission Denied Errors
+Problem: Some Nmap scans require root privileges.
+
+Solution: Use sudo for advanced scans:
+
+sudo nmap -O 127.0.0.1
+sudo nmap -sS 127.0.0.1
+Issue 2: Slow Scan Performance
+Problem: Scans taking too long to complete.
+
+Solution: Adjust timing templates:
+
+# Faster but less accurate
+nmap -T5 127.0.0.1
+
+# Balanced approach
+nmap -T4 127.0.0.1
+
+# More thorough but slower
+nmap -T2 127.0.0.1
+Issue 3: No Open Ports Found
+Problem: Scans show no open ports on localhost.
+
+Solution: Start some services for testing:
+
+# Start SSH service
+sudo systemctl start ssh
+
+# Start Apache web server
+sudo systemctl start apache2
+
+# Verify services are running
+sudo netstat -tlnp
+Issue 4: Script Execution Errors
+Problem: Bash scripts fail to execute properly.
+
+Solution: Check script permissions and syntax:
+
+# Make script executable
+chmod +x script_name.sh
+
+# Check for syntax errors
+bash -n script_name.sh
+
+# Run with debugging
+bash -x script_name.sh
+Best Practices and Security Considerations
+Ethical Scanning Guidelines
+Only scan systems you own or have explicit permission to test
+Use appropriate timing to avoid overwhelming target systems
+Document all scanning activities for compliance purposes
+Be aware of legal implications in your jurisdiction
+Optimization Tips
+Use timing templates appropriately (-T0 to -T5)
+Limit port ranges when possible (-p 1-1000)
+Use host discovery to avoid scanning inactive hosts
+Save results in multiple formats for different analysis needs
+Script Enhancement Ideas
+Add email notifications when scans complete
+Implement database storage for scan results
+Create web-based reporting interfaces
+Add integration with vulnerability databases
+Conclusion
+In this comprehensive lab, you have successfully learned how to use Nmap for network scanning and enumeration, which are critical skills for incident response and adversary emulation. You accomplished the following key objectives:
+
+Technical Skills Developed:
+
+Mastered various Nmap scanning techniques including host discovery, port scanning, service detection, and OS fingerprinting
+Created automated Bash scripts to streamline scanning processes and improve efficiency
+Learned to analyze and interpret scan results to identify potential security vulnerabilities
+Developed skills in script automation for repetitive security tasks
+Practical Applications:
+
+Incident Response: These skills enable you to quickly assess network infrastructure during security incidents, identify compromised systems, and understand the scope of potential breaches
+Adversary Emulation: Understanding how attackers use scanning tools helps you better simulate real-world attack scenarios and improve defensive strategies
+Security Assessment: Regular network scanning helps maintain security posture by identifying unauthorized services and potential entry points
+Professional Value: The automated scanning scripts you created demonstrate practical DevSecOps skills that are highly valued in cybersecurity roles. These tools can be integrated into larger security frameworks and adapted for specific organizational needs.
+
+Next Steps: Consider expanding your knowledge by exploring advanced Nmap scripting engine (NSE) scripts, integrating these tools with other security platforms, and developing more sophisticated automation frameworks for comprehensive security assessments.
+
+The combination of manual scanning expertise and automation scripting provides a solid foundation for advanced cybersecurity practices and positions you well for success in incident response and adversary emulation roles.
