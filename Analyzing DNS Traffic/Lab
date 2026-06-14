@@ -1,0 +1,468 @@
+Analyzing DNS Traffic
+Objectives
+By the end of this lab, students will be able to:
+
+Capture and filter DNS traffic using tcpdump
+Analyze DNS query patterns for security anomalies
+Write Python scripts to parse DNS packet data
+Identify suspicious DNS behaviors indicating potential threats
+Detect DNS tunneling and DGA domains
+Prerequisites
+Basic understanding of DNS protocol and port 53
+Linux command-line proficiency
+Python programming fundamentals
+Familiarity with network packet analysis concepts
+Lab Environment
+Al Nafi provides pre-configured Linux cloud machines. Click Start Lab to access your environment with all necessary tools pre-installed.
+
+Task 1: Capture DNS Traffic with tcpdump
+Step 1.1: Identify Network Interface
+Check available network interfaces:
+
+ip addr show
+Note your primary interface (typically eth0 or ens33).
+
+Step 1.2: Capture DNS Traffic
+Start capturing DNS traffic on port 53:
+
+sudo tcpdump -i eth0 -n port 53
+Flags explained:
+
+-i eth0: Specify interface
+-n: Skip hostname resolution
+port 53: Filter DNS traffic only
+Step 1.3: Generate Test Traffic
+Open a new terminal and create DNS queries:
+
+nslookup google.com
+nslookup github.com
+nslookup amazon.com
+Step 1.4: Save Capture to File
+Capture DNS traffic to a pcap file for analysis:
+
+sudo tcpdump -i eth0 -n -w dns_capture.pcap port 53
+Let it run for 2-3 minutes while generating queries. Press Ctrl+C to stop.
+
+Step 1.5: Read Captured Traffic
+View the captured packets:
+
+sudo tcpdump -r dns_capture.pcap -n
+For verbose output:
+
+sudo tcpdump -r dns_capture.pcap -n -v
+Task 2: Analyze DNS Traffic with Python
+Step 2.1: Install Required Libraries
+Install Python packet analysis tools:
+
+sudo apt update
+sudo apt install python3-pip -y
+pip3 install scapy pandas
+Step 2.2: Create DNS Analysis Script
+Create dns_analyzer.py:
+
+#!/usr/bin/env python3
+
+import sys
+from scapy.all import *
+from collections import Counter
+
+def analyze_dns_traffic(pcap_file):
+    """
+    Analyze DNS traffic from pcap file.
+    
+    Args:
+        pcap_file: Path to pcap file
+    
+    Returns:
+        Dictionary with analysis results
+    """
+    # TODO: Read packets from pcap file using rdpcap()
+    # TODO: Initialize counters for queries, domains, query types
+    # TODO: Loop through packets and extract DNS layer information
+    # TODO: Count query types, domains, and response codes
+    # TODO: Return analysis results as dictionary
+    pass
+
+def detect_suspicious_patterns(queried_domains):
+    """
+    Detect suspicious DNS patterns.
+    
+    Args:
+        queried_domains: Counter object with domain frequencies
+    
+    Returns:
+        List of suspicious indicators
+    """
+    suspicious_indicators = []
+    
+    # TODO: Check for high-frequency domains (threshold > 10)
+    # TODO: Check for suspicious keywords in domain names
+    # TODO: Detect DGA-like domains (long, random-looking strings)
+    # TODO: Check consonant-to-vowel ratio for randomness
+    # TODO: Append findings to suspicious_indicators list
+    
+    return suspicious_indicators
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python3 dns_analyzer.py <pcap_file>")
+        sys.exit(1)
+    
+    pcap_file = sys.argv[1]
+    
+    # TODO: Call analyze_dns_traffic() function
+    # TODO: Print statistics (total queries, unique domains)
+    # TODO: Print top 10 queried domains
+    # TODO: Call detect_suspicious_patterns() function
+    # TODO: Display suspicious activity if found
+
+if __name__ == "__main__":
+    main()
+Make it executable:
+
+chmod +x dns_analyzer.py
+Step 2.3: Complete the Analysis Script
+Your task: Implement the TODO sections in dns_analyzer.py:
+
+Use rdpcap() to read the pcap file
+Check if packet has DNS layer with packet.haslayer(DNS)
+Extract query name: dns_layer.qd.qname.decode('utf-8').rstrip('.')
+Distinguish queries (qr=0) from responses (qr=1)
+Use Counter objects to track frequencies
+Run your completed script:
+
+python3 dns_analyzer.py dns_capture.pcap
+Step 2.4: Create Real-Time DNS Monitor
+Create dns_monitor.py:
+
+#!/usr/bin/env python3
+
+from scapy.all import *
+from collections import defaultdict, deque
+from datetime import datetime, timedelta
+
+class DNSMonitor:
+    def __init__(self, interface="eth0"):
+        self.interface = interface
+        self.query_history = defaultdict(deque)
+        self.suspicious_keywords = ['malware', 'phishing', 'trojan', 'botnet']
+        self.suspicious_tlds = ['.tk', '.ml', '.ga']
+    
+    def is_suspicious_domain(self, domain):
+        """
+        Check if domain exhibits suspicious characteristics.
+        
+        Args:
+            domain: Domain name to check
+        
+        Returns:
+            Tuple (is_suspicious: bool, reason: str)
+        """
+        # TODO: Check for suspicious keywords in domain
+        # TODO: Check for suspicious TLDs
+        # TODO: Check for DGA-like patterns (long, random strings)
+        # TODO: Return True/False with reason
+        pass
+    
+    def analyze_query_frequency(self, domain):
+        """
+        Analyze query frequency for beaconing detection.
+        
+        Args:
+            domain: Domain name
+        
+        Returns:
+            Tuple (is_frequent: bool, reason: str)
+        """
+        # TODO: Track query timestamps in query_history
+        # TODO: Keep only last 5 minutes of queries
+        # TODO: Check if query count exceeds threshold (e.g., 20)
+        # TODO: Return True if suspicious frequency detected
+        pass
+    
+    def process_dns_packet(self, packet):
+        """
+        Process individual DNS packets.
+        
+        Args:
+            packet: Scapy packet object
+        """
+        # TODO: Check if packet has DNS layer
+        # TODO: Extract query name and source IP
+        # TODO: Call is_suspicious_domain() to check domain
+        # TODO: Call analyze_query_frequency() to check frequency
+        # TODO: Print alerts for suspicious activity
+        pass
+    
+    def start_monitoring(self):
+        """Start real-time DNS monitoring."""
+        print(f"[+] Monitoring DNS on {self.interface}")
+        print("[+] Press Ctrl+C to stop")
+        
+        # TODO: Use sniff() with filter="port 53"
+        # TODO: Set prn=self.process_dns_packet
+        # TODO: Handle KeyboardInterrupt for clean exit
+        pass
+
+def main():
+    # TODO: Get network interface
+    # TODO: Create DNSMonitor instance
+    # TODO: Start monitoring
+    pass
+
+if __name__ == "__main__":
+    main()
+Your task: Complete the DNSMonitor class implementation.
+
+Task 3: Detect DNS Tunneling
+Step 3.1: Create Tunneling Detection Script
+Create dns_tunneling_detector.py:
+
+#!/usr/bin/env python3
+
+from scapy.all import *
+import sys
+from collections import defaultdict
+import statistics
+
+def detect_dns_tunneling(pcap_file):
+    """
+    Detect potential DNS tunneling based on indicators.
+    
+    Args:
+        pcap_file: Path to pcap file
+    
+    Returns:
+        List of tunneling indicators
+    """
+    packets = rdpcap(pcap_file)
+    
+    # Track metrics per domain
+    domain_metrics = defaultdict(lambda: {
+        'query_count': 0,
+        'query_lengths': [],
+        'unique_subdomains': set(),
+        'txt_records': 0
+    })
+    
+    # TODO: Loop through packets
+    # TODO: Extract base domain (last two parts)
+    # TODO: Track query count per domain
+    # TODO: Track query lengths (long queries = suspicious)
+    # TODO: Count unique subdomains per base domain
+    # TODO: Count TXT record queries (type 16)
+    
+    tunneling_indicators = []
+    
+    # TODO: Analyze metrics for each domain
+    # TODO: Score based on: high query volume (>50)
+    # TODO: Score based on: many unique subdomains (>20)
+    # TODO: Score based on: long domain names (avg >30 chars)
+    # TODO: Score based on: many TXT queries (>10)
+    # TODO: Add domains with score >= 3 to indicators list
+    
+    return tunneling_indicators
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python3 dns_tunneling_detector.py <pcap_file>")
+        sys.exit(1)
+    
+    # TODO: Call detect_dns_tunneling()
+    # TODO: Print results with risk scores
+    pass
+
+if __name__ == "__main__":
+    main()
+Step 3.2: Complete and Test Tunneling Detection
+Your task: Implement the tunneling detection logic:
+
+Calculate average query length per domain
+Count unique subdomains (many subdomains = data exfiltration)
+Identify excessive TXT record usage
+Assign risk scores based on multiple indicators
+Run the detector:
+
+chmod +x dns_tunneling_detector.py
+python3 dns_tunneling_detector.py dns_capture.pcap
+Step 3.3: Create Baseline Comparison Tool
+Create dns_baseline.py:
+
+#!/usr/bin/env python3
+
+import json
+from scapy.all import *
+from collections import Counter
+
+class DNSBaseline:
+    def __init__(self):
+        self.baseline = {
+            'normal_domains': set(),
+            'typical_query_volume': 0,
+            'common_query_types': {}
+        }
+    
+    def create_baseline(self, pcap_file, output_file="baseline.json"):
+        """
+        Create DNS baseline from normal traffic.
+        
+        Args:
+            pcap_file: Path to baseline pcap
+            output_file: Output JSON file
+        """
+        # TODO: Read packets from pcap
+        # TODO: Extract all queried domains
+        # TODO: Count query types
+        # TODO: Calculate typical query volume
+        # TODO: Save baseline to JSON file
+        pass
+    
+    def detect_anomalies(self, pcap_file, baseline_file):
+        """
+        Detect anomalies compared to baseline.
+        
+        Args:
+            pcap_file: Current traffic pcap
+            baseline_file: Baseline JSON file
+        
+        Returns:
+            List of anomalies
+        """
+        # TODO: Load baseline from JSON
+        # TODO: Analyze current traffic
+        # TODO: Find new domains not in baseline
+        # TODO: Detect unusual query types
+        # TODO: Check for volume spikes
+        # TODO: Return list of anomalies
+        pass
+
+def main():
+    # TODO: Parse command-line arguments
+    # TODO: Support --create-baseline and --detect modes
+    # TODO: Call appropriate methods
+    pass
+
+if __name__ == "__main__":
+    main()
+Your task: Implement baseline creation and anomaly detection.
+
+Task 4: Advanced Analysis Techniques
+Step 4.1: Identify DGA Domains
+DGA (Domain Generation Algorithm) domains exhibit:
+
+Long, random-looking strings
+High consonant-to-vowel ratio
+Lack of recognizable words
+Frequent registration of new domains
+Your task: Enhance your analyzer to detect DGA patterns:
+
+def is_dga_domain(domain):
+    """
+    Detect DGA-like domains.
+    
+    Args:
+        domain: Domain name to check
+    
+    Returns:
+        Boolean indicating if domain appears to be DGA-generated
+    """
+    # TODO: Extract subdomain (before first dot)
+    # TODO: Calculate vowel and consonant counts
+    # TODO: Check if consonants > vowels * 3
+    # TODO: Check if length > 12 characters
+    # TODO: Return True if both conditions met
+    pass
+Step 4.2: Detect DNS Beaconing
+Beaconing indicates malware checking in with C2 servers:
+
+Regular, periodic queries
+Same domain queried repeatedly
+Consistent time intervals
+Your task: Add beaconing detection to your monitor:
+
+def detect_beaconing(query_history, domain):
+    """
+    Detect periodic beaconing behavior.
+    
+    Args:
+        query_history: Deque of query timestamps
+        domain: Domain being queried
+    
+    Returns:
+        Boolean indicating beaconing behavior
+    """
+    # TODO: Calculate time intervals between queries
+    # TODO: Check for regular intervals (standard deviation < threshold)
+    # TODO: Check for minimum query count (>10)
+    # TODO: Return True if beaconing detected
+    pass
+Step 4.3: Generate Comprehensive Report
+Create dns_report.py:
+
+#!/usr/bin/env python3
+
+import json
+from scapy.all import *
+from datetime import datetime
+
+def generate_report(pcap_file, output_file="report.json"):
+    """
+    Generate comprehensive DNS analysis report.
+    
+    Args:
+        pcap_file: Input pcap file
+        output_file: Output JSON report
+    """
+    report = {
+        'timestamp': datetime.now().isoformat(),
+        'total_queries': 0,
+        'unique_domains': 0,
+        'top_domains': {},
+        'suspicious_activity': [],
+        'recommendations': []
+    }
+    
+    # TODO: Analyze pcap file
+    # TODO: Populate report sections
+    # TODO: Add suspicious findings
+    # TODO: Generate recommendations
+    # TODO: Save to JSON file
+    
+    return report
+
+# TODO: Implement main() function
+Expected Outcomes
+After completing this lab, you should have:
+
+Captured DNS traffic using tcpdump with appropriate filters
+Analyzed packet data to identify query patterns and frequencies
+Detected suspicious activity including:
+High-frequency queries
+DGA domains
+DNS tunneling indicators
+Beaconing behavior
+Created monitoring tools for real-time DNS analysis
+Generated reports documenting findings and recommendations
+Troubleshooting Tips
+Issue: Permission denied when running tcpdump
+
+Solution: Use sudo before tcpdump commands or add user to pcap group
+Issue: Scapy import errors
+
+Solution: Reinstall with pip3 install --upgrade scapy
+Issue: No packets captured
+
+Solution: Verify correct interface with ip addr show and check firewall rules
+Issue: DNS layer not found in packets
+
+Solution: Ensure filtering on port 53 and verify DNS traffic is present
+Conclusion
+This lab provided hands-on experience with DNS traffic analysis for security purposes. You learned to capture network traffic, parse DNS packets programmatically, and identify suspicious patterns that may indicate security threats. These skills are essential for network security monitoring, incident response, and threat hunting.
+
+Key takeaways:
+
+DNS traffic analysis reveals potential security incidents
+Automated analysis tools detect patterns humans might miss
+Multiple indicators provide stronger evidence of malicious activity
+Baseline comparison helps identify anomalous behavior
+Continue practicing by analyzing different traffic samples and refining your detection algorithms.
