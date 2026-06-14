@@ -1,0 +1,487 @@
+ Password Cracking with Hashcat
+Objectives
+By the end of this lab, students will be able to:
+
+Understand the fundamentals of password cracking and hash analysis
+Install and configure Hashcat on a Linux system
+Perform dictionary-based password attacks using Hashcat
+Implement brute-force attacks with custom character sets
+Utilize GPU acceleration to improve cracking performance
+Analyze and compare performance metrics between CPU and GPU cracking
+Create and manage custom wordlists for targeted attacks
+Identify different hash types and select appropriate attack modes
+Document and report password cracking results effectively
+Prerequisites
+Before starting this lab, students should have:
+
+Basic understanding of Linux command-line operations
+Fundamental knowledge of cryptographic hash functions (MD5, SHA-1, SHA-256)
+Basic understanding of password security concepts
+Familiarity with file system navigation and text editing in Linux
+Understanding of cybersecurity ethics and legal considerations
+Lab Environment
+Ready-to-Use Cloud Machines: Al Nafi provides Linux-based cloud machines with all necessary tools pre-installed. Simply click Start Lab to access your dedicated environment. No need to build your own VM or configure additional systems.
+
+System Requirements:
+
+Ubuntu 20.04 LTS or newer
+Minimum 4GB RAM
+GPU support (NVIDIA or AMD) for acceleration tasks
+Internet connection for downloading wordlists
+Task 1: Environment Setup and Hash Preparation
+Subtask 1.1: Install Hashcat and Dependencies
+First, we need to install Hashcat and verify our system capabilities.
+
+# Update system packages
+sudo apt update && sudo apt upgrade -y
+
+# Install Hashcat and required dependencies
+sudo apt install hashcat opencl-headers ocl-icd-opencl-dev -y
+
+# Install additional GPU drivers if needed (NVIDIA)
+sudo apt install nvidia-driver-470 nvidia-opencl-dev -y
+
+# Verify Hashcat installation
+hashcat --version
+
+# Check available OpenCL devices
+hashcat -I
+Subtask 1.2: Create Sample Hash Files
+We'll create various hash types to practice different cracking techniques.
+
+# Create a working directory
+mkdir ~/hashcat_lab
+cd ~/hashcat_lab
+
+# Create MD5 hashes for testing
+echo -n "password123" | md5sum | cut -d' ' -f1 > md5_hashes.txt
+echo -n "admin2023" | md5sum | cut -d' ' -f1 >> md5_hashes.txt
+echo -n "welcome" | md5sum | cut -d' ' -f1 >> md5_hashes.txt
+echo -n "qwerty" | md5sum | cut -d' ' -f1 >> md5_hashes.txt
+
+# Create SHA-256 hashes
+echo -n "password123" | sha256sum | cut -d' ' -f1 > sha256_hashes.txt
+echo -n "admin2023" | sha256sum | cut -d' ' -f1 >> sha256_hashes.txt
+echo -n "welcome" | sha256sum | cut -d' ' -f1 >> sha256_hashes.txt
+echo -n "qwerty" | sha256sum | cut -d' ' -f1 >> sha256_hashes.txt
+
+# Display created hashes
+echo "MD5 Hashes:"
+cat md5_hashes.txt
+echo -e "\nSHA-256 Hashes:"
+cat sha256_hashes.txt
+Subtask 1.3: Download and Prepare Wordlists
+# Create wordlist directory
+mkdir wordlists
+cd wordlists
+
+# Download popular wordlists
+wget https://github.com/danielmiessler/SecLists/raw/master/Passwords/Common-Credentials/10-million-password-list-top-1000000.txt -O top1m.txt
+
+# Create a custom small wordlist for testing
+cat > custom_wordlist.txt << 'EOF'
+password
+123456
+password123
+admin
+admin2023
+welcome
+qwerty
+letmein
+monkey
+dragon
+EOF
+
+# Create a numeric wordlist
+seq 1000 9999 > numeric.txt
+
+# Return to main directory
+cd ~/hashcat_lab
+Task 2: Basic Password Cracking Techniques
+Subtask 2.1: Dictionary Attack on MD5 Hashes
+Let's start with a basic dictionary attack using our custom wordlist.
+
+# Perform dictionary attack on MD5 hashes
+hashcat -m 0 -a 0 md5_hashes.txt wordlists/custom_wordlist.txt
+
+# Check results
+hashcat -m 0 md5_hashes.txt --show
+
+# Save results to file
+hashcat -m 0 md5_hashes.txt --show > md5_cracked.txt
+echo "Cracked MD5 passwords:"
+cat md5_cracked.txt
+Subtask 2.2: Dictionary Attack on SHA-256 Hashes
+# Perform dictionary attack on SHA-256 hashes
+hashcat -m 1400 -a 0 sha256_hashes.txt wordlists/custom_wordlist.txt
+
+# Check and save results
+hashcat -m 1400 sha256_hashes.txt --show > sha256_cracked.txt
+echo "Cracked SHA-256 passwords:"
+cat sha256_cracked.txt
+Subtask 2.3: Performance Analysis - CPU vs GPU
+# Create performance test script
+cat > performance_test.sh << 'EOF'
+#!/bin/bash
+
+echo "=== Performance Comparison Test ==="
+echo "Testing MD5 hash cracking performance"
+echo
+
+# Test with CPU only (OpenCL device 1, usually CPU)
+echo "CPU-only test:"
+time hashcat -m 0 -a 0 -d 1 --quiet md5_hashes.txt wordlists/top1m.txt 2>/dev/null
+
+echo
+echo "GPU-accelerated test:"
+# Test with GPU (OpenCL device 2, usually GPU)
+time hashcat -m 0 -a 0 -d 2 --quiet md5_hashes.txt wordlists/top1m.txt 2>/dev/null
+
+echo
+echo "Performance test completed"
+EOF
+
+# Make script executable and run
+chmod +x performance_test.sh
+./performance_test.sh
+Task 3: Advanced Cracking Techniques
+Subtask 3.1: Brute Force Attack
+# Create simple hashes for brute force testing
+echo -n "abc" | md5sum | cut -d' ' -f1 > simple_md5.txt
+echo -n "123" | md5sum | cut -d' ' -f1 >> simple_md5.txt
+
+# Brute force attack - 3 character lowercase
+hashcat -m 0 -a 3 simple_md5.txt ?l?l?l
+
+# Brute force attack - 3 character digits
+hashcat -m 0 -a 3 simple_md5.txt ?d?d?d
+
+# Show cracked results
+hashcat -m 0 simple_md5.txt --show
+Subtask 3.2: Rule-Based Attack
+# Create a rules file for common password variations
+cat > custom.rule << 'EOF'
+:
+c
+u
+$1
+$2
+$3
+$!
+$@
+^1
+^2
+^3
+EOF
+
+# Apply rules to dictionary attack
+hashcat -m 0 -a 0 md5_hashes.txt wordlists/custom_wordlist.txt -r custom.rule
+
+# Check results
+hashcat -m 0 md5_hashes.txt --show
+Subtask 3.3: Combination Attack
+# Create two small wordlists for combination
+echo -e "pass\nadmin\nuser" > left.txt
+echo -e "word\n123\n2023" > right.txt
+
+# Create combination hashes to test
+echo -n "password" | md5sum | cut -d' ' -f1 > combo_test.txt
+echo -n "admin123" | md5sum | cut -d' ' -f1 >> combo_test.txt
+echo -n "user2023" | md5sum | cut -d' ' -f1 >> combo_test.txt
+
+# Perform combination attack
+hashcat -m 0 -a 1 combo_test.txt left.txt right.txt
+
+# Show results
+hashcat -m 0 combo_test.txt --show
+Task 4: GPU Acceleration Analysis
+Subtask 4.1: Benchmark Different Hash Types
+# Create comprehensive benchmark script
+cat > benchmark.sh << 'EOF'
+#!/bin/bash
+
+echo "=== Hashcat Benchmark Analysis ==="
+echo "Date: $(date)"
+echo
+
+# Run benchmark for common hash types
+echo "Benchmarking MD5 (Hash mode 0):"
+hashcat -b -m 0
+
+echo -e "\nBenchmarking SHA-256 (Hash mode 1400):"
+hashcat -b -m 1400
+
+echo -e "\nBenchmarking NTLM (Hash mode 1000):"
+hashcat -b -m 1000
+
+echo -e "\nBenchmarking bcrypt (Hash mode 3200):"
+hashcat -b -m 3200
+
+echo -e "\nSystem Information:"
+echo "GPU Information:"
+lspci | grep -i vga
+echo -e "\nCPU Information:"
+lscpu | grep "Model name"
+echo -e "\nMemory Information:"
+free -h
+EOF
+
+# Run benchmark
+chmod +x benchmark.sh
+./benchmark.sh > benchmark_results.txt
+
+# Display results
+cat benchmark_results.txt
+Subtask 4.2: Performance Optimization
+# Create optimized cracking script
+cat > optimized_crack.sh << 'EOF'
+#!/bin/bash
+
+HASH_FILE="$1"
+WORDLIST="$2"
+HASH_MODE="$3"
+
+if [ $# -ne 3 ]; then
+    echo "Usage: $0 <hash_file> <wordlist> <hash_mode>"
+    echo "Example: $0 md5_hashes.txt wordlists/top1m.txt 0"
+    exit 1
+fi
+
+echo "=== Optimized Hashcat Cracking ==="
+echo "Hash file: $HASH_FILE"
+echo "Wordlist: $WORDLIST"
+echo "Hash mode: $HASH_MODE"
+echo
+
+# Use optimized settings
+hashcat -m "$HASH_MODE" -a 0 "$HASH_FILE" "$WORDLIST" \
+    --optimized-kernel-enable \
+    --workload-profile 3 \
+    --status \
+    --status-timer 10
+
+echo -e "\nCracking completed. Results:"
+hashcat -m "$HASH_MODE" "$HASH_FILE" --show
+EOF
+
+# Make executable
+chmod +x optimized_crack.sh
+
+# Test with our MD5 hashes
+./optimized_crack.sh md5_hashes.txt wordlists/top1m.txt 0
+Task 5: Analysis and Reporting
+Subtask 5.1: Create Comprehensive Report
+# Create analysis script
+cat > analysis_report.sh << 'EOF'
+#!/bin/bash
+
+echo "=== Password Cracking Analysis Report ==="
+echo "Generated on: $(date)"
+echo "Analyst: $(whoami)"
+echo
+
+echo "## Hash Analysis Summary"
+echo
+
+echo "### MD5 Hashes Analyzed:"
+wc -l md5_hashes.txt
+echo "Cracked:"
+if [ -f md5_cracked.txt ]; then
+    wc -l md5_cracked.txt
+    echo "Success Rate: $(echo "scale=2; $(wc -l < md5_cracked.txt) * 100 / $(wc -l < md5_hashes.txt)" | bc)%"
+else
+    echo "0"
+fi
+
+echo
+echo "### SHA-256 Hashes Analyzed:"
+wc -l sha256_hashes.txt
+echo "Cracked:"
+if [ -f sha256_cracked.txt ]; then
+    wc -l sha256_cracked.txt
+    echo "Success Rate: $(echo "scale=2; $(wc -l < sha256_cracked.txt) * 100 / $(wc -l < sha256_hashes.txt)" | bc)%"
+else
+    echo "0"
+fi
+
+echo
+echo "## Cracked Passwords Analysis"
+echo
+
+if [ -f md5_cracked.txt ]; then
+    echo "### MD5 Cracked Passwords:"
+    cat md5_cracked.txt | cut -d':' -f2 | sort | uniq -c | sort -nr
+fi
+
+if [ -f sha256_cracked.txt ]; then
+    echo "### SHA-256 Cracked Passwords:"
+    cat sha256_cracked.txt | cut -d':' -f2 | sort | uniq -c | sort -nr
+fi
+
+echo
+echo "## Security Recommendations"
+echo "1. Avoid common passwords found in wordlists"
+echo "2. Use complex passwords with mixed character sets"
+echo "3. Implement proper password policies"
+echo "4. Consider using stronger hashing algorithms"
+echo "5. Implement salt for password hashing"
+EOF
+
+# Generate report
+chmod +x analysis_report.sh
+./analysis_report.sh > final_report.txt
+
+# Display report
+cat final_report.txt
+Subtask 5.2: Performance Metrics Collection
+# Create performance metrics script
+cat > metrics.sh << 'EOF'
+#!/bin/bash
+
+echo "=== Performance Metrics Collection ==="
+echo
+
+# Create test hash for consistent measurement
+echo -n "testpassword" | md5sum | cut -d' ' -f1 > test_hash.txt
+
+echo "Testing different attack modes on MD5:"
+echo
+
+echo "1. Dictionary Attack Performance:"
+time hashcat -m 0 -a 0 test_hash.txt wordlists/custom_wordlist.txt --quiet 2>/dev/null
+
+echo "2. Brute Force Attack Performance (4 chars):"
+time hashcat -m 0 -a 3 test_hash.txt ?l?l?l?l --quiet 2>/dev/null
+
+echo "3. Rule-based Attack Performance:"
+time hashcat -m 0 -a 0 test_hash.txt wordlists/custom_wordlist.txt -r custom.rule --quiet 2>/dev/null
+
+echo
+echo "Hardware utilization during cracking:"
+echo "GPU Temperature and Usage:"
+nvidia-smi 2>/dev/null || echo "NVIDIA GPU not available"
+
+echo
+echo "System load:"
+uptime
+EOF
+
+chmod +x metrics.sh
+./metrics.sh
+Troubleshooting Common Issues
+Issue 1: OpenCL Device Not Found
+# Check OpenCL installation
+clinfo
+
+# If not installed, install OpenCL
+sudo apt install clinfo ocl-icd-opencl-dev
+
+# For NVIDIA GPUs
+sudo apt install nvidia-opencl-dev
+
+# For AMD GPUs
+sudo apt install mesa-opencl-icd
+Issue 2: Hashcat Not Recognizing GPU
+# Check GPU status
+lspci | grep -i vga
+
+# Verify drivers
+nvidia-smi  # For NVIDIA
+rocm-smi    # For AMD
+
+# Reinstall drivers if needed
+sudo apt purge nvidia-* && sudo apt autoremove
+sudo apt install nvidia-driver-470
+Issue 3: Performance Issues
+# Check system resources
+htop
+
+# Verify thermal throttling
+sensors
+
+# Optimize workload profile
+hashcat --help | grep workload-profile
+Lab Validation
+Verification Checklist
+# Create validation script
+cat > validate_lab.sh << 'EOF'
+#!/bin/bash
+
+echo "=== Lab 11 Validation Checklist ==="
+echo
+
+# Check if Hashcat is installed
+if command -v hashcat &> /dev/null; then
+    echo "✓ Hashcat installed successfully"
+    hashcat --version
+else
+    echo "✗ Hashcat not found"
+fi
+
+# Check if hash files exist
+if [ -f md5_hashes.txt ]; then
+    echo "✓ MD5 hash file created"
+else
+    echo "✗ MD5 hash file missing"
+fi
+
+if [ -f sha256_hashes.txt ]; then
+    echo "✓ SHA-256 hash file created"
+else
+    echo "✗ SHA-256 hash file missing"
+fi
+
+# Check if wordlists exist
+if [ -f wordlists/custom_wordlist.txt ]; then
+    echo "✓ Custom wordlist created"
+else
+    echo "✗ Custom wordlist missing"
+fi
+
+# Check if any passwords were cracked
+if [ -f md5_cracked.txt ] && [ -s md5_cracked.txt ]; then
+    echo "✓ MD5 passwords successfully cracked"
+else
+    echo "✗ No MD5 passwords cracked"
+fi
+
+# Check OpenCL devices
+if hashcat -I | grep -q "OpenCL"; then
+    echo "✓ OpenCL devices detected"
+else
+    echo "✗ No OpenCL devices found"
+fi
+
+echo
+echo "Lab validation completed"
+EOF
+
+chmod +x validate_lab.sh
+./validate_lab.sh
+Conclusion
+In this comprehensive lab, you have successfully:
+
+Technical Skills Acquired:
+
+Installed and configured Hashcat on a Linux system
+Created and analyzed various hash types (MD5, SHA-256)
+Performed multiple attack methods including dictionary, brute-force, rule-based, and combination attacks
+Utilized GPU acceleration to significantly improve cracking performance
+Benchmarked different hash algorithms and analyzed performance metrics
+Security Insights Gained:
+
+Understanding the vulnerability of weak passwords to automated cracking
+Recognition of the importance of strong password policies
+Appreciation for the computational power available to attackers
+Knowledge of how different hashing algorithms perform under attack
+Practical Applications: This lab demonstrates critical skills for incident response and adversary emulation scenarios. Password cracking is an essential technique for:
+
+Incident Response: Analyzing compromised credentials and assessing breach impact
+Penetration Testing: Evaluating password strength in target environments
+Digital Forensics: Recovering passwords from seized systems
+Security Assessment: Testing organizational password policies
+Real-World Relevance: The techniques learned in this lab reflect actual methods used by both security professionals and malicious actors. Understanding these capabilities helps organizations better defend against credential-based attacks and implement appropriate security controls.
+
+Next Steps: Consider exploring advanced topics such as custom rule creation, distributed cracking across multiple systems, and integration with other security tools for comprehensive security assessments.
+
+Remember to always use these skills ethically and within legal boundaries, following proper authorization procedures and organizational policies.
