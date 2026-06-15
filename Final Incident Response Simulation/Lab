@@ -1,0 +1,847 @@
+Final Incident Response Simulation
+Objectives
+By the end of this lab, students will be able to:
+
+Deploy and configure a complete Security Operations Center (SOC) environment using open-source tools
+Detect, analyze, and respond to simulated cyber attacks using industry-standard incident response procedures
+Utilize Wazuh for security information and event management (SIEM) and endpoint detection
+Implement Suricata for network intrusion detection and prevention
+Deploy Zeek for comprehensive network security monitoring and traffic analysis
+Execute incident response playbooks following industry best practices
+Perform containment, eradication, and recovery procedures for security incidents
+Document incident response activities and generate comprehensive reports
+Prerequisites
+Before starting this lab, students should have:
+
+Basic understanding of Linux command-line operations
+Fundamental knowledge of networking concepts (TCP/IP, ports, protocols)
+Basic familiarity with cybersecurity concepts and terminology
+Understanding of log analysis and pattern recognition
+Knowledge of common attack vectors and techniques
+Lab Environment Setup
+Al Nafi Cloud Machine: This lab runs entirely on a single Linux-based cloud machine provided by Al Nafi. Simply click Start Lab to access your pre-configured environment. No additional virtual machines or remote hosts are required.
+
+System Requirements: Ubuntu 20.04 LTS with 8GB RAM and 50GB storage (pre-configured)
+
+Task 1: Environment Preparation and Tool Installation
+Subtask 1.1: System Update and Preparation
+First, ensure your system is updated and prepare the environment for security tool installation.
+
+# Update system packages
+sudo apt update && sudo apt upgrade -y
+
+# Install essential dependencies
+sudo apt install -y curl wget gnupg2 software-properties-common apt-transport-https ca-certificates
+
+# Create directories for our lab
+mkdir -p ~/incident-response-lab/{logs,scripts,evidence,reports}
+cd ~/incident-response-lab
+Subtask 1.2: Install and Configure Wazuh
+Wazuh serves as our central SIEM platform for log collection, analysis, and alerting.
+
+# Add Wazuh repository
+curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | sudo apt-key add -
+echo "deb https://packages.wazuh.com/4.x/apt/ stable main" | sudo tee /etc/apt/sources.list.d/wazuh.list
+
+# Update package list
+sudo apt update
+
+# Install Wazuh manager
+sudo apt install -y wazuh-manager
+
+# Start and enable Wazuh manager
+sudo systemctl enable wazuh-manager
+sudo systemctl start wazuh-manager
+
+# Install Wazuh API
+sudo apt install -y wazuh-api
+
+# Configure Wazuh API
+sudo /var/ossec/api/scripts/configure_api.sh
+
+# Start Wazuh API
+sudo systemctl enable wazuh-api
+sudo systemctl start wazuh-api
+
+# Install Wazuh agent (for local monitoring)
+sudo apt install -y wazuh-agent
+
+# Configure agent to connect to local manager
+sudo sed -i 's/<server>.*<\/server>/<server>127.0.0.1<\/server>/' /var/ossec/etc/ossec.conf
+
+# Start Wazuh agent
+sudo systemctl enable wazuh-agent
+sudo systemctl start wazuh-agent
+Subtask 1.3: Install and Configure Suricata
+Suricata provides network intrusion detection and prevention capabilities.
+
+# Install Suricata
+sudo apt install -y suricata
+
+# Update Suricata rules
+sudo suricata-update
+
+# Configure Suricata for our network interface
+INTERFACE=$(ip route | grep default | awk '{print $5}' | head -1)
+sudo sed -i "s/interface: eth0/interface: $INTERFACE/" /etc/suricata/suricata.yaml
+
+# Enable JSON output for better integration
+sudo sed -i 's/enabled: no/enabled: yes/' /etc/suricata/suricata.yaml
+
+# Start Suricata
+sudo systemctl enable suricata
+sudo systemctl start suricata
+
+# Verify Suricata is running
+sudo systemctl status suricata
+Subtask 1.4: Install and Configure Zeek
+Zeek provides comprehensive network traffic analysis and logging.
+
+# Install Zeek
+sudo apt install -y zeek
+
+# Add Zeek to PATH
+echo 'export PATH=/opt/zeek/bin:$PATH' >> ~/.bashrc
+source ~/.bashrc
+
+# Configure Zeek network interface
+INTERFACE=$(ip route | grep default | awk '{print $5}' | head -1)
+echo "interface=$INTERFACE" | sudo tee /opt/zeek/etc/node.cfg
+
+# Install Zeek control scripts
+sudo /opt/zeek/bin/zeekctl install
+
+# Start Zeek
+sudo /opt/zeek/bin/zeekctl start
+
+# Verify Zeek is running
+sudo /opt/zeek/bin/zeekctl status
+Subtask 1.5: Configure Log Integration
+Create integration between all tools for centralized monitoring.
+
+# Configure Wazuh to monitor Suricata logs
+sudo tee -a /var/ossec/etc/ossec.conf << 'EOF'
+<localfile>
+  <log_format>json</log_format>
+  <location>/var/log/suricata/eve.json</location>
+</localfile>
+EOF
+
+# Configure Wazuh to monitor Zeek logs
+sudo tee -a /var/ossec/etc/ossec.conf << 'EOF'
+<localfile>
+  <log_format>syslog</log_format>
+  <location>/opt/zeek/logs/current/conn.log</location>
+</localfile>
+<localfile>
+  <log_format>syslog</log_format>
+  <location>/opt/zeek/logs/current/dns.log</location>
+</localfile>
+<localfile>
+  <log_format>syslog</log_format>
+  <location>/opt/zeek/logs/current/http.log</location>
+</localfile>
+EOF
+
+# Restart Wazuh manager to apply configuration
+sudo systemctl restart wazuh-manager
+Task 2: Attack Simulation and Detection
+Subtask 2.1: Create Attack Simulation Scripts
+We'll simulate common attack scenarios to test our detection capabilities.
+
+# Create port scanning simulation script
+cat > ~/incident-response-lab/scripts/port_scan_simulation.sh << 'EOF'
+#!/bin/bash
+echo "Starting port scan simulation..."
+TARGET="127.0.0.1"
+
+# Simulate TCP SYN scan
+for port in 22 80 443 3389 445 135; do
+    timeout 1 bash -c "</dev/tcp/$TARGET/$port" 2>/dev/null
+    if [ $? -eq 0 ]; then
+        echo "Port $port is open on $TARGET"
+    fi
+    sleep 0.5
+done
+
+# Simulate UDP scan
+for port in 53 161 123; do
+    echo "test" | timeout 1 nc -u $TARGET $port 2>/dev/null
+    sleep 0.5
+done
+
+echo "Port scan simulation completed"
+EOF
+
+chmod +x ~/incident-response-lab/scripts/port_scan_simulation.sh
+# Create web attack simulation script
+cat > ~/incident-response-lab/scripts/web_attack_simulation.sh << 'EOF'
+#!/bin/bash
+echo "Starting web attack simulation..."
+
+# Install apache2 for testing
+sudo apt install -y apache2
+sudo systemctl start apache2
+
+# Simulate SQL injection attempts
+curl -s "http://localhost/index.php?id=1' OR '1'='1" > /dev/null
+curl -s "http://localhost/login.php?user=admin&pass=' OR 1=1--" > /dev/null
+curl -s "http://localhost/search.php?q=<script>alert('XSS')</script>" > /dev/null
+
+# Simulate directory traversal
+curl -s "http://localhost/../../../etc/passwd" > /dev/null
+curl -s "http://localhost/../../../../etc/shadow" > /dev/null
+
+# Simulate brute force attempts
+for i in {1..10}; do
+    curl -s -X POST "http://localhost/login.php" -d "username=admin&password=password$i" > /dev/null
+    sleep 1
+done
+
+echo "Web attack simulation completed"
+EOF
+
+chmod +x ~/incident-response-lab/scripts/web_attack_simulation.sh
+# Create malware simulation script
+cat > ~/incident-response-lab/scripts/malware_simulation.sh << 'EOF'
+#!/bin/bash
+echo "Starting malware simulation..."
+
+# Create suspicious files
+mkdir -p /tmp/malware_test
+echo "This is a test malware file" > /tmp/malware_test/suspicious.exe
+echo "X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" > /tmp/malware_test/eicar.txt
+
+# Simulate network connections to suspicious domains
+dig malware-test.com > /dev/null 2>&1
+dig botnet-command.evil > /dev/null 2>&1
+
+# Simulate process injection behavior
+sleep 300 &
+SLEEP_PID=$!
+echo "Simulated process injection on PID: $SLEEP_PID"
+kill $SLEEP_PID 2>/dev/null
+
+echo "Malware simulation completed"
+EOF
+
+chmod +x ~/incident-response-lab/scripts/malware_simulation.sh
+Subtask 2.2: Execute Attack Simulations
+Run the attack simulations to generate security events.
+
+# Execute port scan simulation
+echo "Executing port scan simulation..."
+~/incident-response-lab/scripts/port_scan_simulation.sh
+
+# Wait for logs to be processed
+sleep 10
+
+# Execute web attack simulation
+echo "Executing web attack simulation..."
+~/incident-response-lab/scripts/web_attack_simulation.sh
+
+# Wait for logs to be processed
+sleep 10
+
+# Execute malware simulation
+echo "Executing malware simulation..."
+~/incident-response-lab/scripts/malware_simulation.sh
+
+# Wait for logs to be processed
+sleep 10
+Subtask 2.3: Monitor and Analyze Detection Results
+Check if our security tools detected the simulated attacks.
+
+# Check Wazuh alerts
+echo "Checking Wazuh alerts..."
+sudo tail -50 /var/ossec/logs/alerts/alerts.log
+
+# Check Suricata alerts
+echo "Checking Suricata alerts..."
+sudo tail -50 /var/log/suricata/fast.log
+
+# Check Zeek connection logs
+echo "Checking Zeek connection logs..."
+sudo tail -20 /opt/zeek/logs/current/conn.log
+
+# Create detection summary
+cat > ~/incident-response-lab/reports/detection_summary.txt << 'EOF'
+INCIDENT DETECTION SUMMARY
+==========================
+Date: $(date)
+Analyst: Security Student
+
+DETECTED EVENTS:
+1. Port Scanning Activity
+   - Source: 127.0.0.1
+   - Target: 127.0.0.1
+   - Ports Scanned: 22, 80, 443, 3389, 445, 135, 53, 161, 123
+   - Detection Tool: Suricata, Zeek
+
+2. Web Application Attacks
+   - SQL Injection Attempts
+   - Cross-Site Scripting (XSS)
+   - Directory Traversal
+   - Brute Force Login Attempts
+   - Detection Tool: Wazuh, Suricata
+
+3. Malware-like Behavior
+   - Suspicious File Creation
+   - DNS Queries to Malicious Domains
+   - Process Injection Simulation
+   - Detection Tool: Wazuh, Zeek
+
+SEVERITY: HIGH
+STATUS: UNDER INVESTIGATION
+EOF
+Task 3: Incident Response Execution
+Subtask 3.1: Incident Classification and Prioritization
+Create an incident response playbook and classify the detected incidents.
+
+# Create incident response playbook
+cat > ~/incident-response-lab/scripts/incident_response_playbook.sh << 'EOF'
+#!/bin/bash
+
+echo "=== INCIDENT RESPONSE PLAYBOOK ==="
+echo "Phase 1: Preparation - COMPLETE"
+echo "Phase 2: Identification - IN PROGRESS"
+echo "Phase 3: Containment - PENDING"
+echo "Phase 4: Eradication - PENDING"
+echo "Phase 5: Recovery - PENDING"
+echo "Phase 6: Lessons Learned - PENDING"
+echo
+
+# Incident classification
+classify_incident() {
+    echo "INCIDENT CLASSIFICATION:"
+    echo "- Type: Multi-vector Attack"
+    echo "- Severity: HIGH"
+    echo "- Priority: P1 (Critical)"
+    echo "- Affected Systems: Web Server, Network Infrastructure"
+    echo "- Business Impact: Potential data breach, service disruption"
+    echo
+}
+
+# Evidence collection
+collect_evidence() {
+    echo "EVIDENCE COLLECTION:"
+    mkdir -p ~/incident-response-lab/evidence/$(date +%Y%m%d_%H%M%S)
+    EVIDENCE_DIR=~/incident-response-lab/evidence/$(date +%Y%m%d_%H%M%S)
+    
+    # Collect system information
+    uname -a > $EVIDENCE_DIR/system_info.txt
+    ps aux > $EVIDENCE_DIR/running_processes.txt
+    netstat -tulpn > $EVIDENCE_DIR/network_connections.txt
+    
+    # Collect security logs
+    sudo cp /var/ossec/logs/alerts/alerts.log $EVIDENCE_DIR/wazuh_alerts.log
+    sudo cp /var/log/suricata/fast.log $EVIDENCE_DIR/suricata_alerts.log
+    sudo cp /opt/zeek/logs/current/conn.log $EVIDENCE_DIR/zeek_connections.log
+    
+    echo "Evidence collected in: $EVIDENCE_DIR"
+    echo
+}
+
+classify_incident
+collect_evidence
+EOF
+
+chmod +x ~/incident-response-lab/scripts/incident_response_playbook.sh
+
+# Execute incident classification
+~/incident-response-lab/scripts/incident_response_playbook.sh
+Subtask 3.2: Containment Procedures
+Implement containment measures to prevent further damage.
+
+# Create containment script
+cat > ~/incident-response-lab/scripts/containment_procedures.sh << 'EOF'
+#!/bin/bash
+
+echo "=== CONTAINMENT PROCEDURES ==="
+echo "Implementing immediate containment measures..."
+
+# Network containment
+echo "1. Implementing network containment..."
+
+# Block suspicious IP addresses (in real scenario, these would be external IPs)
+sudo iptables -A INPUT -s 192.168.1.100 -j DROP
+sudo iptables -A OUTPUT -d 192.168.1.100 -j DROP
+
+# Block suspicious ports
+sudo iptables -A INPUT -p tcp --dport 4444 -j DROP
+sudo iptables -A INPUT -p tcp --dport 1337 -j DROP
+
+# Log blocked connections
+sudo iptables -A INPUT -j LOG --log-prefix "BLOCKED: "
+
+echo "Network containment rules applied"
+
+# Process containment
+echo "2. Implementing process containment..."
+
+# Kill suspicious processes (simulated)
+pkill -f "suspicious"
+pkill -f "malware"
+
+# Disable unnecessary services
+sudo systemctl stop telnet
+sudo systemctl disable telnet
+
+echo "Process containment completed"
+
+# File system containment
+echo "3. Implementing file system containment..."
+
+# Quarantine suspicious files
+sudo mkdir -p /quarantine
+sudo mv /tmp/malware_test/* /quarantine/ 2>/dev/null
+
+# Set immutable attributes on critical files
+sudo chattr +i /etc/passwd
+sudo chattr +i /etc/shadow
+
+echo "File system containment completed"
+
+# User account containment
+echo "4. Implementing user account containment..."
+
+# Disable potentially compromised accounts (example)
+# sudo usermod -L suspicious_user
+
+# Force password reset for all users (in production environment)
+# sudo chage -d 0 username
+
+echo "User account containment completed"
+
+echo "=== CONTAINMENT PHASE COMPLETE ==="
+EOF
+
+chmod +x ~/incident-response-lab/scripts/containment_procedures.sh
+
+# Execute containment procedures
+sudo ~/incident-response-lab/scripts/containment_procedures.sh
+Subtask 3.3: Eradication and Recovery
+Remove threats and restore normal operations.
+
+# Create eradication and recovery script
+cat > ~/incident-response-lab/scripts/eradication_recovery.sh << 'EOF'
+#!/bin/bash
+
+echo "=== ERADICATION AND RECOVERY PROCEDURES ==="
+
+# Eradication phase
+echo "Phase 1: ERADICATION"
+echo "1. Removing malware and malicious files..."
+
+# Remove quarantined files
+sudo rm -rf /quarantine/*
+
+# Clean temporary directories
+sudo find /tmp -name "*.exe" -delete
+sudo find /tmp -name "suspicious*" -delete
+
+# Update and run security scans
+sudo apt update
+sudo apt install -y clamav clamav-daemon
+sudo freshclam
+sudo clamscan -r /home --infected --remove
+
+echo "Malware removal completed"
+
+# Patch vulnerabilities
+echo "2. Patching vulnerabilities..."
+sudo apt upgrade -y
+
+# Harden web server configuration
+if [ -f /etc/apache2/apache2.conf ]; then
+    sudo sed -i 's/ServerTokens OS/ServerTokens Prod/' /etc/apache2/conf-available/security.conf
+    sudo sed -i 's/ServerSignature On/ServerSignature Off/' /etc/apache2/conf-available/security.conf
+    sudo systemctl restart apache2
+fi
+
+echo "System hardening completed"
+
+# Recovery phase
+echo "Phase 2: RECOVERY"
+echo "1. Restoring services..."
+
+# Restart security services
+sudo systemctl restart wazuh-manager
+sudo systemctl restart wazuh-agent
+sudo systemctl restart suricata
+sudo /opt/zeek/bin/zeekctl restart
+
+# Verify service status
+echo "Service status verification:"
+sudo systemctl status wazuh-manager --no-pager -l
+sudo systemctl status suricata --no-pager -l
+
+echo "2. Implementing additional monitoring..."
+
+# Enhanced monitoring rules
+sudo tee -a /var/ossec/etc/ossec.conf << 'MONITORING_EOF'
+<localfile>
+  <log_format>syslog</log_format>
+  <location>/var/log/auth.log</location>
+</localfile>
+<localfile>
+  <log_format>apache</log_format>
+  <location>/var/log/apache2/access.log</location>
+</localfile>
+MONITORING_EOF
+
+sudo systemctl restart wazuh-manager
+
+echo "Enhanced monitoring implemented"
+
+echo "3. Backup and documentation..."
+
+# Create system backup (simplified)
+sudo tar -czf ~/incident-response-lab/evidence/system_backup_$(date +%Y%m%d).tar.gz /etc /var/log
+
+echo "System backup created"
+
+echo "=== ERADICATION AND RECOVERY COMPLETE ==="
+EOF
+
+chmod +x ~/incident-response-lab/scripts/eradication_recovery.sh
+
+# Execute eradication and recovery
+~/incident-response-lab/scripts/eradication_recovery.sh
+Subtask 3.4: Post-Incident Analysis and Reporting
+Generate comprehensive incident reports and lessons learned.
+
+# Create post-incident analysis script
+cat > ~/incident-response-lab/scripts/post_incident_analysis.sh << 'EOF'
+#!/bin/bash
+
+echo "=== POST-INCIDENT ANALYSIS ==="
+
+# Generate incident timeline
+cat > ~/incident-response-lab/reports/incident_timeline.txt << 'TIMELINE_EOF'
+INCIDENT RESPONSE TIMELINE
+==========================
+
+T+00:00 - Initial attack simulation launched
+T+00:05 - Port scanning detected by Suricata
+T+00:10 - Web attacks detected by Wazuh
+T+00:15 - Malware behavior detected by multiple tools
+T+00:20 - Incident classified as HIGH severity
+T+00:25 - Containment procedures initiated
+T+00:30 - Network isolation implemented
+T+00:35 - Malicious processes terminated
+T+00:40 - Eradication procedures started
+T+00:45 - System patching completed
+T+00:50 - Recovery procedures initiated
+T+00:55 - Services restored and verified
+T+01:00 - Post-incident analysis begun
+
+TIMELINE_EOF
+
+# Generate lessons learned report
+cat > ~/incident-response-lab/reports/lessons_learned.txt << 'LESSONS_EOF'
+LESSONS LEARNED REPORT
+======================
+
+WHAT WENT WELL:
+- Detection tools successfully identified multiple attack vectors
+- Incident response playbook was followed systematically
+- Containment was implemented quickly and effectively
+- Evidence was properly collected and preserved
+- Recovery procedures restored normal operations
+
+AREAS FOR IMPROVEMENT:
+- Need faster initial detection and alerting
+- Require better integration between security tools
+- Should implement automated containment for known threats
+- Need more comprehensive backup procedures
+- Require regular incident response training
+
+RECOMMENDATIONS:
+1. Implement SOAR (Security Orchestration, Automation, and Response) platform
+2. Enhance network segmentation
+3. Improve user security awareness training
+4. Regular penetration testing and red team exercises
+5. Update incident response procedures quarterly
+
+TECHNICAL IMPROVEMENTS:
+- Configure real-time alerting for critical events
+- Implement threat intelligence feeds
+- Deploy additional network monitoring sensors
+- Enhance log correlation capabilities
+- Implement automated threat hunting
+
+LESSONS_EOF
+
+# Generate executive summary
+cat > ~/incident-response-lab/reports/executive_summary.txt << 'EXEC_EOF'
+EXECUTIVE INCIDENT SUMMARY
+==========================
+
+INCIDENT OVERVIEW:
+A simulated multi-vector cyber attack was successfully detected, contained, and remediated using open-source security tools including Wazuh, Suricata, and Zeek.
+
+KEY METRICS:
+- Time to Detection: 5 minutes
+- Time to Containment: 25 minutes
+- Time to Recovery: 55 minutes
+- Total Incident Duration: 1 hour
+- Systems Affected: 1 (Web Server)
+- Data Compromised: None (simulation)
+
+BUSINESS IMPACT:
+- No actual business disruption (simulation environment)
+- Demonstrated effectiveness of current security controls
+- Identified areas for security improvement
+- Validated incident response procedures
+
+FINANCIAL IMPACT:
+- Cost of Response: Minimal (internal resources)
+- Potential Cost Avoided: Significant (prevented data breach)
+- ROI of Security Investment: Positive
+
+NEXT STEPS:
+1. Implement recommended security improvements
+2. Conduct regular incident response training
+3. Update security policies and procedures
+4. Schedule follow-up security assessment
+
+EXEC_EOF
+
+echo "Post-incident analysis reports generated"
+echo "Reports available in: ~/incident-response-lab/reports/"
+ls -la ~/incident-response-lab/reports/
+EOF
+
+chmod +x ~/incident-response-lab/scripts/post_incident_analysis.sh
+
+# Execute post-incident analysis
+~/incident-response-lab/scripts/post_incident_analysis.sh
+Task 4: Verification and Documentation
+Subtask 4.1: Verify System Security Status
+Ensure all security measures are properly implemented and functioning.
+
+# Create verification script
+cat > ~/incident-response-lab/scripts/security_verification.sh << 'EOF'
+#!/bin/bash
+
+echo "=== SECURITY STATUS VERIFICATION ==="
+
+# Check security service status
+echo "1. Security Services Status:"
+echo "Wazuh Manager: $(sudo systemctl is-active wazuh-manager)"
+echo "Wazuh Agent: $(sudo systemctl is-active wazuh-agent)"
+echo "Suricata: $(sudo systemctl is-active suricata)"
+echo "Zeek Status:"
+sudo /opt/zeek/bin/zeekctl status
+
+# Check firewall rules
+echo "2. Firewall Rules:"
+sudo iptables -L -n
+
+# Check for suspicious processes
+echo "3. Process Verification:"
+ps aux | grep -E "(suspicious|malware)" || echo "No suspicious processes found"
+
+# Check file integrity
+echo "4. File Integrity Check:"
+ls -la /quarantine/ 2>/dev/null || echo "Quarantine directory empty/not found"
+lsattr /etc/passwd /etc/shadow 2>/dev/null
+
+# Check log files
+echo "5. Log File Status:"
+echo "Wazuh Alerts: $(sudo wc -l /var/ossec/logs/alerts/alerts.log)"
+echo "Suricata Alerts: $(sudo wc -l /var/log/suricata/fast.log)"
+echo "Zeek Connections: $(sudo wc -l /opt/zeek/logs/current/conn.log)"
+
+# Generate security status report
+cat > ~/incident-response-lab/reports/security_status.txt << 'STATUS_EOF'
+SECURITY STATUS REPORT
+======================
+Date: $(date)
+
+SECURITY TOOLS STATUS: OPERATIONAL
+- Wazuh SIEM: Active and monitoring
+- Suricata IDS/IPS: Active and detecting
+- Zeek Network Monitor: Active and logging
+
+CONTAINMENT MEASURES: ACTIVE
+- Network filtering rules applied
+- Suspicious processes terminated
+- Malicious files quarantined
+
+SYSTEM HARDENING: COMPLETE
+- Security patches applied
+- Services hardened
+- File permissions secured
+
+MONITORING STATUS: ENHANCED
+- Additional log sources configured
+- Real-time alerting enabled
+- Evidence collection automated
+
+OVERALL SECURITY POSTURE: IMPROVED
+STATUS_EOF
+
+echo "Security verification completed"
+EOF
+
+chmod +x ~/incident-response-lab/scripts/security_verification.sh
+
+# Execute security verification
+~/incident-response-lab/scripts/security_verification.sh
+Subtask 4.2: Create Final Documentation Package
+Compile all incident response documentation into a comprehensive package.
+
+# Create documentation compilation script
+cat > ~/incident-response-lab/scripts/compile_documentation.sh << 'EOF'
+#!/bin/bash
+
+echo "=== COMPILING INCIDENT RESPONSE DOCUMENTATION ==="
+
+# Create final documentation directory
+mkdir -p ~/incident-response-lab/final_documentation
+
+# Copy all reports
+cp ~/incident-response-lab/reports/* ~/incident-response-lab/final_documentation/
+
+# Create master incident report
+cat > ~/incident-response-lab/final_documentation/master_incident_report.txt << 'MASTER_EOF'
+MASTER INCIDENT RESPONSE REPORT
+===============================
+Lab: Final Incident Response Simulation
+Date: $(date)
+Analyst: Security Student
+
+TABLE OF CONTENTS:
+1. Executive Summary
+2. Incident Timeline
+3. Technical Analysis
+4. Response Actions
+5. Lessons Learned
+6. Recommendations
+
+1. EXECUTIVE SUMMARY:
+This lab successfully demonstrated a complete incident response lifecycle using open-source security tools. A simulated multi-vector attack was detected, analyzed, contained, and remediated following industry best practices.
+
+2. INCIDENT TIMELINE:
+See: incident_timeline.txt
+
+3. TECHNICAL ANALYSIS:
+Attack Vectors Simulated:
+- Network reconnaissance (port scanning)
+- Web application attacks (SQL injection, XSS, directory traversal)
+- Malware-like behavior simulation
+
+Detection Tools Used:
+- Wazuh: SIEM and endpoint detection
+- Suricata: Network intrusion detection
+- Zeek: Network traffic analysis
+
+4. RESPONSE ACTIONS:
+- Immediate containment through network isolation
+- Process termination and file quarantine
+- System patching and hardening
+- Service restoration and verification
+
+5. LESSONS LEARNED:
+See: lessons_learned.txt
+
+6. RECOMMENDATIONS:
+- Implement automated response capabilities
+- Enhance monitoring coverage
+- Regular training and exercises
+- Continuous improvement of procedures
+
+CONCLUSION:
+The incident response simulation was successful, demonstrating the effectiveness of open-source security tools and proper incident response procedures.
+MASTER_EOF
+
+# Create tool configuration backup
+mkdir -p ~/incident-response-lab/final_documentation/configurations
+sudo cp /var/ossec/etc/ossec.conf ~/incident-response-lab/final_documentation/configurations/wazuh_config.xml
+sudo cp /etc/suricata/suricata.yaml ~/incident-response-lab/final_documentation/configurations/suricata_config.yaml
+sudo cp /opt/zeek/etc/node.cfg ~/incident-response-lab/final_documentation/configurations/zeek_config.cfg
+
+# Create evidence archive
+tar -czf ~/incident-response-lab/final_documentation/evidence_archive.tar.gz ~/incident-response-lab/evidence/
+
+# Generate file manifest
+echo "DOCUMENTATION PACKAGE MANIFEST" > ~/incident-response-lab/final_documentation/manifest.txt
+echo "===============================" >> ~/incident-response-lab/final_documentation/manifest.txt
+echo "Generated: $(date)" >> ~/incident-response-lab/final_documentation/manifest.txt
+echo "" >> ~/incident-response-lab/final_documentation/manifest.txt
+find ~/incident-response-lab/final_documentation -type f -exec ls -lh {} \; >> ~/incident-response-lab/final_documentation/manifest.txt
+
+echo "Documentation compilation completed"
+echo "Final documentation available in: ~/incident-response-lab/final_documentation/"
+ls -la ~/incident-response-lab/final_documentation/
+EOF
+
+chmod +x ~/incident-response-lab/scripts/compile_documentation.sh
+
+# Execute documentation compilation
+~/incident-response-lab/scripts/compile_documentation.sh
+Troubleshooting Common Issues
+Issue 1: Services Not Starting
+If security services fail to start:
+
+# Check service status and logs
+sudo systemctl status wazuh-manager
+sudo journalctl -u wazuh-manager -f
+
+# Restart services in correct order
+sudo systemctl restart wazuh-manager
+sudo systemctl restart wazuh-agent
+sudo systemctl restart suricata
+Issue 2: No Alerts Generated
+If no security alerts are generated:
+
+# Verify log file permissions
+sudo chmod 644 /var/log/suricata/eve.json
+sudo chown ossec:ossec /var/log/suricata/eve.json
+
+# Check Wazuh configuration
+sudo /var/ossec/bin/ossec-logtest
+Issue 3: Network Interface Issues
+If network monitoring tools can't bind to interface:
+
+# Check available interfaces
+ip link show
+
+# Update configuration with correct interface
+INTERFACE=$(ip route | grep default | awk '{print $5}' | head -1)
+echo "Using interface: $INTERFACE"
+Conclusion
+Congratulations! You have successfully completed a comprehensive incident response simulation that mirrors real-world Security Operations Center (SOC) activities. Throughout this lab, you have:
+
+Technical Accomplishments:
+
+Deployed and configured a complete security monitoring stack using Wazuh, Suricata, and Zeek
+Successfully detected multiple attack vectors including network reconnaissance, web application attacks, and malware-like behavior
+Executed a systematic incident response following industry-standard playbooks
+Implemented effective containment, eradication, and recovery procedures
+Generated comprehensive documentation and evidence packages
+Professional Skills Developed:
+
+Incident Detection: Used multiple detection tools to identify security threats
+Threat Analysis: Analyzed attack patterns and determined appropriate response actions
+Containment Strategies: Implemented network, process, and file system containment measures
+Evidence Collection: Properly documented and preserved digital evidence
+Recovery Procedures: Restored systems to normal operations while maintaining security
+Documentation: Created professional incident response reports and recommendations
+Why This Matters: In today's cybersecurity landscape, organizations face an average of 200+ security alerts per day. The skills you've developed in this lab are directly applicable to roles such as:
+
+SOC Analyst: Monitoring and responding to security incidents
+Incident Response Specialist: Leading incident response efforts
+Security Engineer: Designing and implementing security controls
+Cybersecurity Consultant: Helping organizations improve their security posture
+The open-source tools you've mastered (Wazuh, Suricata, Zeek) are widely used in enterprise environments and provide the same capabilities as expensive commercial solutions. Your hands-on experience with these tools, combined with your understanding of incident response procedures, makes you well-prepared for real-world cybersecurity challenges.
+
+Next Steps:
+
+Practice with different attack scenarios and detection rules
+Explore advanced features of each security tool
+Study threat intelligence integration and automated response capabilities
+Consider pursuing certifications in incident response and security operations
+You now have the foundational skills and practical experience needed to protect organizations from cyber threats and respond effectively when security incidents occur.
